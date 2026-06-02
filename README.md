@@ -14,25 +14,32 @@ OpenAI-compatible proxy server for [Agnes AI](https://agnes-ai.com), providing a
 - **OpenAI-Compatible API** — Standard `/v1/chat/completions` and `/v1/models` endpoints
 - **Streaming Support** — SSE streaming for chat completions
 - **Tool Schema Normalization** — Resolves `$ref` and `$defs` in tool schemas before forwarding
-- **Dashboard UI** — Liquid glass effects, model/key management, real-time stats
-- **Platform Login** — Login with Agnes AI account credentials, session persistence
+- **Dashboard UI** — Liquid glass effects, model/key management, real-time stats, plan status
+- **Platform Login** — Login with Agnes AI account credentials, session persistence, auto-login on restart
 - **Auto-Config** — Automatically configures opencode provider on startup
-- **Dynamic Model Fetch** — Fetches available models from `https://agnes-ai.com/api/v1/models`
-- **Response Caching** — LRU cache for non-streaming responses
-- **Multi-Key Support** — Rotate between multiple Agnes AI API keys
+- **Dynamic Model Fetch** — Fetches available models from `https://apihub.agnes-ai.com/v1/models`
+- **Model Remapping** — Transparently translates legacy model IDs (`sapiens-ai/agnes-1.5-pro` → `agnes-2.0-flash`)
+- **Response Caching** — LRU cache for non-streaming responses (configurable TTL and max size)
+- **Multi-Key Support** — Rotate between multiple Agnes AI API keys with fingerprint-based sticky sessions
 - **AI Wallpaper** — Generate AI backgrounds via `agnes-image-2.1-flash`, preloaded to disk for instant display
+- **Plan Status** — View subscription status, usage windows, and billing info from the dashboard
+- **Retry Logic** — Automatic retry with exponential backoff for transient errors (model unavailable, query engine)
+- **Test Mode** — Mock responses for development without consuming API credits
 - **Zero Dependencies** — No npm packages required
 
 ## Available Models
 
-| Model | Description |
-|-------|-------------|
-| `sapiens-ai/agnes-1.5-pro` | High-performance text model for advanced reasoning and tool calling |
-| `sapiens-ai/agnes-1.5-lite` | Lightweight multimodal model for low latency and cost efficiency |
-| `sapiens-ai/agnes-image-1.2` | Image generation model (text-to-image, image-to-image) |
-| `sapiens-ai/agnes-video-v1.2` | Cinematic-grade async video generation with synchronized audio |
+| Model ID | Name | Capabilities |
+|----------|------|-------------|
+| `agnes-2.0-flash` | Agnes 2.0 Flash | Text generation, tool calling, 256K context |
+| `agnes-1.5-flash` | Agnes 1.5 Flash | Text generation, tool calling, 256K context |
+| `agnes-image-2.0-flash` | Agnes Image 2.0 Flash | Image generation (text/image → image) |
+| `agnes-image-2.1-flash` | Agnes Image 2.1 Flash | Image generation (text/image → image) |
+| `agnes-video-v2.0` | Agnes Video V2.0 | Video generation (text/image → video) |
 
-Models are dynamically fetched from `https://agnes-ai.com/api/v1/models` on startup.
+Legacy model IDs (`sapiens-ai/agnes-1.5-pro`, `sapiens-ai/agnes-1.5-lite`, etc.) are automatically remapped to their current equivalents.
+
+Models are dynamically fetched from `https://apihub.agnes-ai.com/v1/models` on startup with a 5-minute cache TTL.
 
 ## How the Free Tier Works
 
@@ -54,6 +61,9 @@ node proxy.js
 # Or use launcher (auto-detects Bun, falls back to Node)
 start.cmd
 
+# Or Node-only launcher
+start-node.cmd
+
 # Open dashboard
 open http://localhost:8080
 ```
@@ -66,14 +76,14 @@ Add to `.config/config.json`:
 
 ```json
 {
-  "API_KEY": "sk-your-agnes-api-key"
+  "API_KEY": "cpk-your-agnes-api-key"
 }
 ```
 
 Or set environment variable:
 
 ```bash
-set AGNES_API_KEY=sk-your-agnes-api-key
+set AGNES_API_KEY=cpk-your-agnes-api-key
 node proxy.js
 ```
 
@@ -84,37 +94,18 @@ Edit `.config/config.json` or set environment variables:
 | Key | Description | Default |
 |-----|-------------|---------|
 | `LISTEN_ADDR` | Proxy listen address | `127.0.0.1:8080` |
-| `UPSTREAM_BASE_URL` | Agnes AI API URL | `https://agnes-ai.com/api` |
+| `UPSTREAM_BASE_URL` | Agnes AI API URL | `https://apihub.agnes-ai.com` |
 | `API_KEY` | Agnes AI API key | — |
 | `REQUEST_TIMEOUT` | Upstream request timeout | `15m` |
 | `API_KEYS` | Client API keys for proxy auth | `[]` (open access) |
-| `TOKENS` | Array of `{name, token}` for multi-key support | auto-populated |
+| `TOKENS` | Array of `{name, token, platformUsername, platformPassword}` for multi-key support | auto-populated |
+| `ENABLED_MODELS` | Models visible to clients | all fetched models |
 | `CACHE_TTL` | Response cache TTL | `60s` |
 | `CACHE_MAX_SIZE` | Max cached responses | `100` |
 | `CACHE_ENABLED` | Enable response caching | `true` |
 | `WALLPAPER_MODE` | Wallpaper source: `none`, `bing`, or `ai` | `bing` |
 | `WALLPAPER_PROMPT` | Prompt for AI wallpaper generation | `realistic vibrant colorful mountain range landscape` |
-| `PLATFORM_USERNAME` | Agnes AI account email | — |
-| `PLATFORM_PASSWORD` | Agnes AI account password | — |
-
-### Platform Login
-
-The proxy supports logging into your Agnes AI platform account for additional features:
-
-1. **Via Dashboard**: Open the Keys modal → click "Login" → enter credentials
-2. **Via Config**: Set `PLATFORM_USERNAME` and `PLATFORM_PASSWORD` in config
-3. **Via Env Vars**: Set `PLATFORM_USERNAME` and `PLATFORM_PASSWORD`
-
-Auto-login on startup if credentials are configured and no saved session exists.
-
-```json
-{
-  "PLATFORM_USERNAME": "user@example.com",
-  "PLATFORM_PASSWORD": "your-password"
-}
-```
-
-Platform session is persisted in config and reused across restarts.
+| `TEST_MODE` | Return mock responses without calling upstream | `false` |
 
 ### Multi-Key Management
 
@@ -123,8 +114,25 @@ The proxy supports multiple Agnes AI API keys. Set `TOKENS` in config:
 ```json
 {
   "TOKENS": [
-    { "name": "Key 1", "token": "sk-key-1" },
-    { "name": "Key 2", "token": "sk-key-2" }
+    { "name": "Key 1", "token": "cpk-key-1" },
+    { "name": "Key 2", "token": "cpk-key-2" }
+  ]
+}
+```
+
+Each token can also store platform credentials for auto-login:
+
+```json
+{
+  "TOKENS": [
+    {
+      "name": "Key 1",
+      "token": "cpk-key-1",
+      "platformUsername": "user@example.com",
+      "platformPassword": "secret",
+      "platformToken": "",
+      "platformUser": null
+    }
   ]
 }
 ```
@@ -137,6 +145,8 @@ The proxy automatically rotates tokens across conversations using **fingerprint-
 Each conversation is identified by an MD5 hash of the first user message (skipping auto title prompts).
 Follow-up requests (tool calls, continuations) in the same conversation are pinned to the same token
 automatically. A global session counter increments for each new conversation.
+
+New conversations are stamped with `[KeyName|sessN]` in the first user message for server-side traceability.
 
 ### Proxy API Keys
 
@@ -166,7 +176,7 @@ const client = new OpenAI({
   apiKey: 'not-needed'
 });
 const response = await client.chat.completions.create({
-  model: 'sapiens-ai/agnes-1.5-pro',
+  model: 'agnes-2.0-flash',
   messages: [{ role: 'user', content: 'Hello!' }]
 });
 ```
@@ -175,19 +185,23 @@ const response = await client.chat.completions.create({
 
 The proxy auto-configures opencode on startup. Restart opencode after starting the proxy, then select the `agnes` provider.
 
+Provider config is written to `~/.config/opencode/opencode.json`. A backup (`openconfig.b4agnes.json`) is created before the first edit. Legacy `zenith` and `stepfun` providers are removed automatically.
+
 ## Dashboard
 
 Access at `http://localhost:8080`:
 
-- **Cache Stats** — Real-time cache hits and performance
-- **API Key Status** — Online/Offline indicator
+- **Plan Status** — Subscription name, expiry, 5-hour and weekly usage bars (or "No Plan" card with login/subscribe CTA)
+- **Cache Stats** — Real-time cache hits, misses, evictions
+- **API Key Status** — Online/Offline indicator per key
 - **SS Mode** — Blur sensitive tokens for screenshots
-- **Liquid Glass Effects** — Canvas-generated SVG displacement maps
-- **Model Management** — Toggle models on/off
-- **Key Manager** — Add/edit/delete API keys with inline editing
+- **Liquid Glass Effects** — Canvas-generated SVG displacement maps with refraction profiles
+- **Model Management** — Toggle models on/off with capability badges (reasoning, tools, vision, context)
+- **Key Manager** — Add/edit/delete API keys with inline editing, platform account info display
 - **Platform Login** — Login with Agnes AI account, view account info, logout
 - **Wallpaper Toggle** — Switch between None, Bing, and AI Image modes with configurable prompt
 - **Collapsible Sections** — Models, API Key, Quick Actions, Environment, Proxy Configuration
+- **Auto-refresh** — Health check every 15s, plan status every 30s
 
 ## API Endpoints
 
@@ -195,58 +209,65 @@ Access at `http://localhost:8080`:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/healthz` | Health check with API key status, uptime, platform login status |
+| `GET` | `/healthz` | Health check with API key status, uptime, platform login status, token state, cache stats |
 | `GET` | `/v1/models` | OpenAI models list |
-| `POST` | `/v1/chat/completions` | OpenAI chat completions (streaming supported) |
+| `POST` | `/v1/chat/completions` | OpenAI chat completions (streaming, retry, caching) |
 
 ### Management API
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` / `POST` | `/api/config` | Read/write proxy configuration |
-| `GET` | `/api/validate` | Validate API key |
-| `GET` | `/api/models` | List available model IDs |
+| `GET` | `/api/validate` | Validate API key against upstream |
+| `GET` | `/api/models` | List available model IDs with metadata |
 | `GET` | `/api/bg` | Wallpaper image (Bing daily, AI-generated, or 204 none) |
 | `POST` | `/api/generate-image` | Generate AI wallpaper, save to `.cache/ai-paper.jpg` |
 | `GET` / `POST` | `/api/keys` | Multi-key CRUD (add/update/delete) |
 | `GET` | `/api/account` | Platform user data (`{ logged_in, user }`) |
+| `GET` | `/api/step-plan-status` | Subscription plan status with usage windows |
 | `POST` | `/api/login` | Platform login with `{ username, password }` |
-| `POST` | `/api/logout` | Clear platform session |
+| `POST` | `/api/logout` | Clear platform session and saved credentials |
+| `GET` | `/api/platform/user` | Platform user info (requires login) |
 | `GET` / `DELETE` | `/api/cache` | View/clear response cache |
 
 ## Architecture
 
 ```
 proxy.js
-├── Config System         — JSON + env vars + API key validation
-├── UpstreamClient        — HTTP client for Agnes AI API
-│   ├── getUserInfo()     — GET /v1/models (validate key)
-│   └── chatCompletions() — POST /v1/chat/completions
+├── Config System         — JSON + env vars, per-token credentials, duration parsing
+├── LRU Response Cache    — MD5-keyed, configurable TTL/max size, streaming excluded
+├── UpstreamClient        — HTTP client for apihub.agnes-ai.com
+│   ├── getUserInfo()     — GET /v1/models (validate key, 10s timeout)
+│   └── chatCompletions() — POST /v1/chat/completions (streaming-aware, configurable timeout)
 ├── Platform Login        — Login/session management for platform account
-│   ├── loginToPlatform() — POST /api/user/login
+│   ├── loginToPlatform() — POST /api/user/login (15s timeout, persists to config)
 │   ├── platformGetUserInfo() — GET /api/user/self
-│   └── platformSession   — Token + user state
-├── Tool Schema Norm.     — $ref resolution and schema normalization
+│   └── platformSession   — Token + user + expiry state
+├── Model Registry        — Fallback models, dynamic fetch (5min TTL), legacy remapping
+├── Tool Schema Norm.     — $ref resolution, nullable simplification, type normalization
+├── Retry Logic           — Up to 3 attempts, exponential backoff (5s/10s/15s)
 ├── HTTP Handlers         — OpenAI + management endpoints
 ├── Request Router        — Pathname-based routing
 ├── AI Wallpaper          — Generates images via /v1/images/generations, preloads to disk
-├── Session Tracking      — Fingerprint-based sticky sessions
-├── Opencode Config       — Auto-configures opencode provider
-└── Server Startup        — Validation, platform login, config write, listen
+├── Session Tracking      — Fingerprint-based sticky sessions with message stamping
+├── Opencode Config       — Auto-configures opencode provider, backup, cleanup
+└── Server Startup        — Validation, platform session restore, model fetch, listen with retry
 
 dashboard.html
-├── Liquid Glass Engine   — Canvas-based displacement/specular maps
-├── Model Management      — Toggle models on/off
+├── Liquid Glass Engine   — Canvas-based displacement/specular maps with refraction profiles
+├── Plan Fieldset         — Subscription status, usage bars, login CTA
+├── Model Management      — Toggle models on/off with capability badges
 ├── Key Manager           — Add/edit/delete API keys + account info
 ├── Platform Login Modal  — Username/password login with status
 ├── Wallpaper Toggle      — None / Bing / AI Image radio group + prompt input
 ├── Cache Stats           — Real-time cache performance
-└── Configuration Forms   — Listen addr, upstream URL, timeout
+├── Auto-refresh          — Health (15s) + plan status (30s) polling
+└── Configuration Forms   — Listen addr, upstream URL, timeout, test mode
 ```
 
 ## Dependencies
 
-No external npm dependencies — uses Node.js built-in modules only: `fs`, `path`, `os`, `http`, `https`, `url`, `crypto`, `zlib`.
+No external npm dependencies — uses Node.js built-in modules only: `fs`, `path`, `os`, `http`, `https`, `crypto`, `zlib`.
 
 ## License
 

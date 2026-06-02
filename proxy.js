@@ -27,6 +27,8 @@ let currentTokenIndex = 0;
 let globalSessionCounter = 0;
 let conversationMap = new Map();
 let platformSession = { token: null, user: null, expiresAt: 0 };
+let wallpaperGenerating = false;
+let wallpaperGenerationPromise = null;
 
 function extractUserPrompt(payload) {
   const msgs = payload.messages;
@@ -99,6 +101,7 @@ function loadConfig() {
     CACHE_TTL: '60s',
     CACHE_MAX_SIZE: 100,
     CACHE_ENABLED: true,
+    TEST_MODE: false,
   };
   if (fs.existsSync(configPath)) {
     try {
@@ -113,8 +116,7 @@ function loadConfig() {
   if (process.env.CACHE_TTL) rawConfig.CACHE_TTL = process.env.CACHE_TTL;
   if (process.env.CACHE_MAX_SIZE) rawConfig.CACHE_MAX_SIZE = parseInt(process.env.CACHE_MAX_SIZE);
   if (process.env.CACHE_ENABLED) rawConfig.CACHE_ENABLED = process.env.CACHE_ENABLED !== 'false';
-  if (process.env.PLATFORM_USERNAME) rawConfig.PLATFORM_USERNAME = process.env.PLATFORM_USERNAME;
-  if (process.env.PLATFORM_PASSWORD) rawConfig.PLATFORM_PASSWORD = process.env.PLATFORM_PASSWORD;
+  if (process.env.TEST_MODE) rawConfig.TEST_MODE = process.env.TEST_MODE !== 'false';
 
   const requestTimeout = parseDuration(rawConfig.REQUEST_TIMEOUT);
   if (!rawConfig.LISTEN_ADDR) throw new Error('LISTEN_ADDR cannot be empty');
@@ -128,7 +130,7 @@ function loadConfig() {
   if (tokens.length === 0) {
     tokens.push({ name: rawConfig.API_KEY ? 'Key 1' : 'Key 1', token: rawConfig.API_KEY || '', session: '' });
   }
-  tokens = tokens.map(t => ({ name: t.name || 'Unnamed', token: t.token || '', email: t.email || '' }));
+  tokens = tokens.map(t => ({ name: t.name || 'Unnamed', token: t.token || '', email: t.email || '', platformUsername: t.platformUsername || '', platformPassword: t.platformPassword || '', platformToken: t.platformToken || '', platformUser: t.platformUser || null }));
 
   const rawModels = rawConfig.ENABLED_MODELS;
   const enabledModels = Array.isArray(rawModels) && rawModels.length > 0 ? rawModels : [...AGNES_MODELS];
@@ -144,12 +146,13 @@ function loadConfig() {
     cacheTtl: parseDuration(rawConfig.CACHE_TTL || '60s') || 60000,
     cacheMaxSize: Math.max(0, rawConfig.CACHE_MAX_SIZE || 100),
     cacheEnabled: rawConfig.CACHE_ENABLED !== false,
+    testMode: rawConfig.TEST_MODE !== false,
     wallpaperMode: rawConfig.WALLPAPER_MODE || 'bing',
     wallpaperPrompt: rawConfig.WALLPAPER_PROMPT || 'realistic vibrant colorful mountain range landscape',
-    platformToken: rawConfig.PLATFORM_TOKEN || '',
-    platformUser: rawConfig.PLATFORM_USER || null,
-    platformUsername: rawConfig.PLATFORM_USERNAME || '',
-    platformPassword: rawConfig.PLATFORM_PASSWORD || '',
+    platformToken: null,
+    platformUser: null,
+    platformUsername: null,
+    platformPassword: null,
   };
 }
 
@@ -183,10 +186,8 @@ function saveConfig(cfg) {
     CACHE_TTL: `${(cfg.cacheTtl || 60000) / 1000}s`,
     CACHE_MAX_SIZE: cfg.cacheMaxSize || 100,
     CACHE_ENABLED: cfg.cacheEnabled !== false,
-    PLATFORM_TOKEN: cfg.platformToken || '',
-    PLATFORM_USER: cfg.platformUser || null,
-    PLATFORM_USERNAME: cfg.platformUsername || '',
-    PLATFORM_PASSWORD: cfg.platformPassword || '',
+    TEST_MODE: cfg.testMode !== false,
+    TOKENS: cfg.tokens,
   }, null, 2));
 }
 
@@ -334,9 +335,14 @@ async function loginToPlatform(username, password) {
       user: user || null,
       expiresAt: Date.now() + 24 * 60 * 60 * 1000,
     };
-    config.platformToken = access_token;
-    config.platformUser = user || null;
-    saveConfig(config);
+    // Save platform credentials back to the first token
+    if (config.tokens && config.tokens.length > 0) {
+      config.tokens[0].platformToken = access_token;
+      config.tokens[0].platformUser = user || null;
+      config.tokens[0].platformUsername = username;
+      config.tokens[0].platformPassword = password;
+      saveConfig(config);
+    }
     if (prevToken !== access_token || prevUser !== (user?.email)) {
       console.log(`[Platform] Login successful for ${username}`);
     }
@@ -411,7 +417,7 @@ async function fetchRemoteModels() {
       console.log(`[Models] Fetched ${dynamicModels.length} models from Agnes AI`);
       modelsCache = null;
 
-      if (config) {
+      if (config && (!Array.isArray(config.enabledModels) || config.enabledModels.length === 0)) {
         config.enabledModels = [...dynamicModels];
       }
 
@@ -729,8 +735,57 @@ async function handleAccountInfo(req, res) {
   }
 }
 
+async function checkImageGenFeature() {
+  if (config.testMode) return false;
+  if (!platformSession.token) return false;
+  try {
+    const resp = await fetch(`${PLATFORM_BASE_URL}/api/user/subscription`, {
+      headers: getPlatformHeaders(),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    const sub = data.data || (Array.isArray(data) ? data[0] : null);
+    if (!sub) return false;
+    return !!(sub.features && sub.features.image_gen);
+  } catch (e) {
+    return false;
+  }
+}
+
 async function handleStepPlanStatus(req, res) {
   if (req.method !== 'GET') { writeOpenAIError(res, 405, 'method not allowed', 'invalid_request_error', ''); return; }
+  if (config.testMode) {
+    writeJSON(res, 200, {
+      has_plan: true,
+      logged_in: true,
+      plan_status: 'active',
+      subscription: {
+        name: 'Test',
+        billing_cycle: 'monthly',
+        status: 'active',
+        payment_method: 'card',
+        key_preview: 'test-xxxx',
+        key_status: 'active',
+        current_period_start: new Date(Date.now() - 30 * 86400000).toISOString(),
+        current_period_end: new Date(Date.now() + 30 * 86400000).toISOString(),
+      },
+      subscription_features: {
+        tps_normal: 60,
+        tps_offpeak: 120,
+        usage_multiplier: 1,
+        claw_agents: true,
+        image_gen: false,
+        video_gen: true,
+        tools: true,
+        mcp: [],
+      },
+      windowed: { used: 50, limit: 1000, usage_pct: 5, reset_at: new Date(Date.now() + 5 * 3600000).toISOString(), reset_in_seconds: 18000 },
+      weekly: { used: 200, limit: 10000, usage_pct: 2, reset_at: new Date(Date.now() + 7 * 86400000).toISOString(), reset_in_seconds: 604800 },
+      image_daily: { used: 10, limit: 100, usage_pct: 10, reset_at: new Date(Date.now() + 24 * 3600000).toISOString(), reset_in_seconds: 86400 },
+    });
+    return;
+  }
   if (!platformSession.token) {
     writeJSON(res, 200, { has_plan: false, plan_status: 'none', subscriptions: [], logged_in: false });
     return;
@@ -756,6 +811,7 @@ async function handleStepPlanStatus(req, res) {
       has_plan: true,
       logged_in: true,
       plan_status: statusMap[sub.status] || 'unknown',
+      username: platformSession.user?.username || platformSession.user?.email || null,
       subscription: {
         name: sub.plan_name,
         billing_cycle: sub.billing_cycle,
@@ -801,6 +857,7 @@ async function handleHealthz(req, res) {
   });
   writeJSON(res, 200, {
     ok: true,
+    test_mode: config.testMode,
     started_at: startTime.toISOString(),
     uptime_sec: Math.floor((Date.now() - startTime.getTime()) / 1000),
     api_key_valid: !!modelsData,
@@ -813,6 +870,11 @@ async function handleHealthz(req, res) {
     platform: {
       logged_in: !!platformSession.token,
       user: platformSession.user?.email || null,
+      tokens: (config.tokens || []).map(t => ({
+        name: t.name,
+        logged_in: !!t.platformToken,
+        email: t.platformUser?.email || null,
+      })),
     },
   });
 }
@@ -859,18 +921,39 @@ async function proxyChatRequest(res, payload, requestedModel) {
 
   if (!config.apiKey) { writeOpenAIError(res, 503, 'no Agnes AI API key configured', 'server_error', 'no_api_key'); return; }
 
+  const tokens = config.tokens || [];
+  const curIdx = currentTokenIndex;
+  const name = curIdx >= 0 && curIdx < tokens.length ? tokens[curIdx].name : '?';
+  const sessNum = session?.sessNum || '?';
+  const promptPreview = extractUserPrompt(payload).substring(0, 120);
+  const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+
+  // Test mode: return a mock "Test" response instead of calling the real API
+  if (config.testMode) {
+    const mockResponse = JSON.stringify({
+      id: 'test-' + Date.now(),
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: requestedModel,
+      choices: [{
+        index: 0,
+        message: { role: 'assistant', content: 'Test' },
+        finish_reason: 'stop'
+      }],
+      usage: { prompt_tokens: 0, completion_tokens: 4, total_tokens: 4 }
+    });
+    try { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(mockResponse); }
+    catch (e) { /* ignore */ }
+    console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-done:0ms (test mode)`);
+    return;
+  }
+
   const cacheEnabled = config.cacheEnabled && !payload.stream;
   let ck;
   if (cacheEnabled) {
     ck = cacheKey(payload, requestedModel);
     const cached = responseCache.get(ck);
     if (cached) {
-      const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-      const tokens = config.tokens || [];
-      const curIdx = currentTokenIndex;
-      const name = curIdx >= 0 && curIdx < tokens.length ? tokens[curIdx].name : '?';
-      const sessNum = session?.sessNum || '?';
-      const promptPreview = extractUserPrompt(payload).substring(0, 120);
       console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-${JSON.stringify(promptPreview)}-cache:HIT`);
       try { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(cached); }
       catch (e) { /* ignore */ }
@@ -879,12 +962,6 @@ async function proxyChatRequest(res, payload, requestedModel) {
     }
   }
 
-  const tokens = config.tokens || [];
-  const curIdx = currentTokenIndex;
-  const name = curIdx >= 0 && curIdx < tokens.length ? tokens[curIdx].name : '?';
-  const sessNum = session?.sessNum || '?';
-  const promptPreview = extractUserPrompt(payload).substring(0, 120);
-  const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-${JSON.stringify(promptPreview)}`);
 
   const cloned = cloneMap(payload);
@@ -1000,54 +1077,72 @@ async function validateApiKey() {
 }
 
 // --- AI Wallpaper Generation ---
+let _aiWallpaperGen = false;
+let _aiWallpaperGenPromise = null;
 async function generateAiWallpaperToDisk() {
-  const cacheDir = path.join(__dirname, '.cache');
-  if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
-  const aiFile = path.join(cacheDir, 'ai-paper.jpg');
-  const apiKey = config.apiKey || config.tokens?.[0]?.token || '';
-  if (!apiKey) throw new Error('no API key');
-
-  const prompt = config.wallpaperPrompt || 'realistic vibrant colorful mountain range landscape';
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60000);
-  const resp = await fetch(`${config.upstreamBaseURL}/v1/images/generations`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'agnes-image-2.1-flash',
-      prompt,
-      n: 1,
-      size: '1024x1024',
-    }),
-    signal: controller.signal,
-  });
-  clearTimeout(timer);
-  if (!resp.ok) throw new Error(`upstream ${resp.status}`);
-
-  const data = await resp.json();
-  let imageUrl = '';
-  let b64Data = '';
-
-  if (data.data && Array.isArray(data.data) && data.data[0]) {
-    const item = data.data[0];
-    if (item.url) imageUrl = item.url;
-    else if (item.b64_json) b64Data = item.b64_json;
+  if (_aiWallpaperGen) {
+    console.log('[AI] Background generation already in progress, waiting...');
+    return _aiWallpaperGenPromise;
   }
-
-  if (b64Data) {
-    fs.writeFileSync(aiFile, Buffer.from(b64Data, 'base64'));
-  } else if (imageUrl) {
-    const imgResp = await fetch(imageUrl);
-    if (!imgResp.ok) throw new Error(`download ${imgResp.status}`);
-    const imgBuf = Buffer.from(await imgResp.arrayBuffer());
-    fs.writeFileSync(aiFile, imgBuf);
-  } else {
-    throw new Error('no image in response');
-  }
+  _aiWallpaperGen = true;
+  _aiWallpaperGenPromise = (async () => {
+    try {
+      const cacheDir = path.join(__dirname, '.cache');
+      if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+      const aiFile = path.join(cacheDir, 'ai-paper.jpg');
+      const apiKey = config.apiKey || config.tokens?.[0]?.token || '';
+      if (!apiKey) throw new Error('no API key');
+  
+      const prompt = config.wallpaperPrompt || 'hdr, polar night, vibrant rainbow colors, trees, mountains, glaciers, stars and dark skies';
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 60000);
+      const resp = await fetch(`${config.upstreamBaseURL}/v1/images/generations`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'agnes-image-2.1-flash',
+          prompt,
+          n: 1,
+          size: '1024x1024',
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!resp.ok) throw new Error(`upstream ${resp.status}`);
+  
+      const data = await resp.json();
+      let imageUrl = '';
+      let b64Data = '';
+  
+      if (data.data && Array.isArray(data.data) && data.data[0]) {
+        const item = data.data[0];
+        if (item.url) imageUrl = item.url;
+        else if (item.b64_json) b64Data = item.b64_json;
+      }
+  
+      if (b64Data) {
+        fs.writeFileSync(aiFile, Buffer.from(b64Data, 'base64'));
+      } else if (imageUrl) {
+        const imgResp = await fetch(imageUrl);
+        if (!imgResp.ok) throw new Error(`download ${imgResp.status}`);
+        const imgBuf = Buffer.from(await imgResp.arrayBuffer());
+        fs.writeFileSync(aiFile, imgBuf);
+      } else {
+        throw new Error('no image in response');
+      }
+      console.log('[AI] Background generation done');
+    } catch (e) {
+      console.error('[AI] Background generation failed:', e.message);
+    } finally {
+      _aiWallpaperGen = false;
+      _aiWallpaperGenPromise = null;
+    }
+  })();
+  return _aiWallpaperGenPromise;
 }
 
 // --- Main Request Handler ---
@@ -1064,14 +1159,92 @@ async function handleRequest(req, res) {
   if (pathname === '/dashboard' || pathname === '/') {
     const dashboardPath = path.join(__dirname, 'dashboard.html');
     if (!fs.existsSync(dashboardPath)) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Dashboard not found'); return; }
-    const html = fs.readFileSync(dashboardPath);
-    res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Length': html.length, 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' });
-    res.end(html);
+    let html = fs.readFileSync(dashboardPath, 'utf-8');
+    const wpMode = config.wallpaperMode || 'bing';
+    const cacheDir = path.join(__dirname, '.cache');
+    if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+    let wpStyle = '';
+
+    if (wpMode === 'ai') {
+      const aiFile = path.join(cacheDir, 'ai-paper.jpg');
+      if (fs.existsSync(aiFile)) {
+        try {
+          const imgBuf = fs.readFileSync(aiFile);
+          wpStyle = '<style>body{background:url(data:image/jpeg;base64,' + imgBuf.toString('base64') + ') center/cover no-repeat fixed}</style>';
+          generateAiWallpaperToDisk().catch(() => {});
+        } catch (e) { console.error('[AI] Failed to embed ai-paper:', e.message); }
+      } else {
+        try {
+          await generateAiWallpaperToDisk();
+          const imgBuf = fs.readFileSync(aiFile);
+          wpStyle = '<style>body{background:url(data:image/jpeg;base64,' + imgBuf.toString('base64') + ') center/cover no-repeat fixed}</style>';
+        } catch (e) { console.error('[AI] Failed to generate ai-paper:', e.message); }
+      }
+    } else if (wpMode === 'bing') {
+      const imgCacheFile = path.join(cacheDir, 'wallpaper.jpg');
+      const today = new Date().toISOString().split('T')[0];
+      const cachedDate = fs.existsSync(imgCacheFile) ? fs.statSync(imgCacheFile).mtime.toISOString().split('T')[0] : '';
+      if (cachedDate === today && fs.existsSync(imgCacheFile)) {
+        try {
+          const imgBuf = fs.readFileSync(imgCacheFile);
+          wpStyle = '<style>body{background:url(data:image/jpeg;base64,' + imgBuf.toString('base64') + ') center/cover no-repeat fixed}</style>';
+        } catch (_) {}
+      } else if (fs.existsSync(imgCacheFile)) {
+        try {
+          const imgBuf = fs.readFileSync(imgCacheFile);
+          wpStyle = '<style>body{background:url(data:image/jpeg;base64,' + imgBuf.toString('base64') + ') center/cover no-repeat fixed}</style>';
+        } catch (_) {}
+        fetch('https://peapix.com/bing/feed').then(r => r.json()).then(data => {
+          const item = Array.isArray(data) ? data[0] : data;
+          const imgUrl = item.fullUrl || item.imageUrl || item.url || '';
+          if (!imgUrl) return;
+          return new Promise((resolve, reject) => {
+            const u = new URL(imgUrl);
+            const mod = u.protocol === 'https:' ? require('https') : require('http');
+            mod.get(imgUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' } }, resolve).on('error', reject);
+          });
+        }).then(imgResp => {
+          const chunks = [];
+          imgResp.on('data', c => chunks.push(c));
+          return new Promise(resolve => imgResp.on('end', () => resolve(Buffer.concat(chunks))));
+        }).then(buf => {
+          fs.writeFileSync(imgCacheFile, buf);
+          console.log('[Bing] Background refreshed');
+        }).catch(() => {});
+      } else {
+        try {
+          const resp = await fetch('https://peapix.com/bing/feed');
+          const data = await resp.json();
+          const item = Array.isArray(data) ? data[0] : data;
+          const imgUrl = item.fullUrl || item.imageUrl || item.url || '';
+          if (imgUrl) {
+            const imgResp = await new Promise((resolve, reject) => {
+              const u = new URL(imgUrl);
+              const mod = u.protocol === 'https:' ? require('https') : require('http');
+              mod.get(imgUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' } }, resolve).on('error', reject);
+            });
+            const chunks = [];
+            await new Promise(resolve => { imgResp.on('data', c => chunks.push(c)); imgResp.on('end', resolve); });
+            const buf = Buffer.concat(chunks);
+            fs.writeFileSync(imgCacheFile, buf);
+            wpStyle = '<style>body{background:url(data:image/jpeg;base64,' + buf.toString('base64') + ') center/cover no-repeat fixed}</style>';
+          }
+        } catch (_) {}
+      }
+    } else {
+      wpStyle = '<style>body{background:#0d1117}</style>';
+    }
+
+    html = html.replace('<body>', '<body data-wp-mode="' + wpMode + '">');
+    if (wpStyle) html = html.replace('</head>', wpStyle + '</head>');
+    const buf = Buffer.from(html);
+    res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Length': buf.length, 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' });
+    res.end(buf);
     return;
   }
 
   if (pathname === '/api/config') {
-    if (req.method === 'GET') { writeJSON(res, 200, { ...config, apiKey: config.apiKey ? config.apiKey.substring(0, 10) + '...' : '', platformToken: config.platformToken ? config.platformToken.substring(0, 10) + '...' : '', platformPassword: config.platformPassword ? '***' : '' }); return; }
+    if (req.method === 'GET') { writeJSON(res, 200, { ...config, apiKey: config.apiKey ? config.apiKey.substring(0, 10) + '...' : '', platformToken: '' }); return; }
     if (req.method === 'POST') {
       try {
         const body = await readBody(req);
@@ -1079,12 +1252,11 @@ async function handleRequest(req, res) {
         if (newConfig.apiKey) config.apiKey = newConfig.apiKey;
         if (newConfig.apiKeys) config.apiKeys = newConfig.apiKeys;
         if (newConfig.listenAddr) config.listenAddr = newConfig.listenAddr;
+        if (newConfig.testMode !== undefined) config.testMode = newConfig.testMode;
         if (newConfig.wallpaperMode) config.wallpaperMode = newConfig.wallpaperMode;
         if (newConfig.wallpaperPrompt !== undefined) config.wallpaperPrompt = newConfig.wallpaperPrompt;
         if (Array.isArray(newConfig.enabledModels)) config.enabledModels = newConfig.enabledModels;
         if (Array.isArray(newConfig.tokens)) config.tokens = newConfig.tokens;
-        if (newConfig.platformUsername !== undefined) config.platformUsername = newConfig.platformUsername;
-        if (newConfig.platformPassword !== undefined) config.platformPassword = newConfig.platformPassword;
         saveConfig(config);
         setupOpencodeConfig();
         writeJSON(res, 200, { success: true });
@@ -1126,9 +1298,13 @@ async function handleRequest(req, res) {
 
   if (pathname === '/api/logout' && req.method === 'POST') {
     platformSession = { token: null, user: null, expiresAt: 0 };
-    config.platformToken = '';
-    config.platformUser = null;
-    saveConfig(config);
+    if (config.tokens && config.tokens.length > 0) {
+      config.tokens[0].platformToken = '';
+      config.tokens[0].platformUser = null;
+      config.tokens[0].platformUsername = '';
+      config.tokens[0].platformPassword = '';
+      saveConfig(config);
+    }
     writeJSON(res, 200, { success: true });
     return;
   }
@@ -1157,7 +1333,7 @@ async function handleRequest(req, res) {
   }
 
   if (pathname === '/api/bg' && req.method === 'GET') {
-    const mode = config.wallpaperMode || 'bing';
+    let mode = config.wallpaperMode || 'bing';
     if (mode === 'none') {
       res.writeHead(204);
       res.end();
@@ -1167,24 +1343,29 @@ async function handleRequest(req, res) {
     if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
 
     if (mode === 'ai') {
-      const aiFile = path.join(cacheDir, 'ai-paper.jpg');
-      if (fs.existsSync(aiFile)) {
-        const imgData = fs.readFileSync(aiFile);
-        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': imgData.length, 'Cache-Control': 'no-cache' });
-        res.end(imgData);
-        generateAiWallpaperToDisk().then(() => console.log('[AI] Background generation done')).catch(e => console.error('[AI] Background generation failed:', e.message));
+      const imageGenAllowed = await checkImageGenFeature();
+      if (!imageGenAllowed) {
+        mode = 'bing';
       } else {
-        try {
-          await generateAiWallpaperToDisk();
+        const aiFile = path.join(cacheDir, 'ai-paper.jpg');
+        if (fs.existsSync(aiFile)) {
           const imgData = fs.readFileSync(aiFile);
           res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': imgData.length, 'Cache-Control': 'no-cache' });
           res.end(imgData);
-        } catch (e) {
-          res.writeHead(500);
-          res.end();
+          generateAiWallpaperToDisk().catch(() => {});
+        } else {
+          try {
+            await generateAiWallpaperToDisk();
+            const imgData = fs.readFileSync(aiFile);
+            res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': imgData.length, 'Cache-Control': 'no-cache' });
+            res.end(imgData);
+          } catch (e) {
+            res.writeHead(500);
+            res.end();
+          }
         }
+        return;
       }
-      return;
     }
 
     const imgCacheFile = path.join(cacheDir, 'wallpaper.jpg');
@@ -1229,11 +1410,20 @@ async function handleRequest(req, res) {
   }
 
   if (pathname === '/api/generate-image' && req.method === 'POST') {
+    const allowed = await checkImageGenFeature();
+    if (!allowed) {
+      writeJSON(res, 403, { error: 'AI image generation requires Plus plan' });
+      return;
+    }
     try {
       await generateAiWallpaperToDisk();
       writeJSON(res, 200, { success: true, url: `/api/bg?t=${Date.now()}` });
     } catch (e) {
-      writeJSON(res, 500, { error: e.message });
+      if (e.message === 'Already generating') {
+        writeJSON(res, 503, { error: 'Background generation already in progress, please wait' });
+      } else {
+        writeJSON(res, 500, { error: e.message });
+      }
     }
     return;
   }
@@ -1440,33 +1630,45 @@ async function startServer() {
   upstream = new UpstreamClient(config);
   const apiKeyValid = await validateApiKey();
 
-  if (config.platformToken) {
-    platformSession = {
-      token: config.platformToken,
-      user: config.platformUser,
-      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-    };
-    console.log(`[Platform] Restored session for ${config.platformUser?.email || 'unknown user'}, validating...`);
-    try {
-      await platformGetUserInfo();
-      console.log(`[Platform] Session valid`);
-    } catch (e) {
-      console.log(`[Platform] Session invalid (${e.message}), re-login...`);
-      platformSession = { token: null, user: null, expiresAt: 0 };
-      config.platformToken = '';
-      config.platformUser = null;
-      if (config.platformUsername && config.platformPassword) {
-        const lr = await loginToPlatform(config.platformUsername, config.platformPassword);
-        console.log(`[Platform] Re-login ${lr.success ? 'successful' : 'failed: ' + lr.message}`);
+  // Restore per-token platform sessions on startup
+  if (config.tokens && config.tokens.length > 0) {
+    const tok = config.tokens[0];
+    if (tok.platformToken) {
+      platformSession = {
+        token: tok.platformToken,
+        user: tok.platformUser,
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      };
+      console.log(`[Platform] Restored session for ${tok.platformUser?.email || 'unknown user'}, validating...`);
+      try {
+        await platformGetUserInfo();
+        console.log(`[Platform] Session valid`);
+      } catch (e) {
+        console.log(`[Platform] Session invalid (${e.message}), re-login...`);
+        platformSession = { token: null, user: null, expiresAt: 0 };
+        if (tok.platformUsername && tok.platformPassword) {
+          const lr = await loginToPlatform(tok.platformUsername, tok.platformPassword);
+          if (lr.success && config.tokens[0]) {
+            config.tokens[0].platformToken = lr.token;
+            config.tokens[0].platformUser = lr.user;
+            saveConfig(config);
+          }
+          console.log(`[Platform] Re-login ${lr.success ? 'successful' : 'failed: ' + lr.message}`);
+        }
       }
-    }
-  } else if (config.platformUsername && config.platformPassword) {
-    console.log('[Platform] No saved session, logging in with configured credentials...');
-    const loginResult = await loginToPlatform(config.platformUsername, config.platformPassword);
-    if (loginResult.success) {
-      console.log(`[Platform] Auto-login successful for ${config.platformUsername}`);
-    } else {
-      console.error(`[Platform] Auto-login failed: ${loginResult.message}`);
+    } else if (tok.platformUsername && tok.platformPassword) {
+      console.log('[Platform] No saved session, logging in with configured credentials...');
+      const loginResult = await loginToPlatform(tok.platformUsername, tok.platformPassword);
+      if (loginResult.success) {
+        console.log(`[Platform] Auto-login successful for ${tok.platformUsername}`);
+        if (config.tokens[0]) {
+          config.tokens[0].platformToken = loginResult.token;
+          config.tokens[0].platformUser = loginResult.user;
+          saveConfig(config);
+        }
+      } else {
+        console.error(`[Platform] Auto-login failed: ${loginResult.message}`);
+      }
     }
   }
 
@@ -1483,7 +1685,7 @@ async function startServer() {
     console.log(`  Models: ${config.enabledModels?.length || dynamicModels?.length || AGNES_MODELS.length} (dynamic)`);
     console.log(`  Response Cache: ${config.cacheEnabled ? 'enabled (' + config.cacheMaxSize + ' entries, ' + (config.cacheTtl / 1000) + 's TTL)' : 'disabled'}`);
     console.log(`  Proxy API Keys: ${config.apiKeys.length > 0 ? config.apiKeys.length + ' (auth enabled)' : 'none (open access)'}`);
-    console.log(`  Platform Login: ${config.platformToken ? 'logged in as ' + (config.platformUser?.email || 'unknown') : 'not logged in'}`);
+    console.log(`  Platform Login: ${platformSession.token ? 'logged in as ' + (platformSession.user?.email || 'unknown') : 'not logged in'}`);
     console.log('');
   }
 
