@@ -57,6 +57,7 @@
       border-radius: inherit;
       overflow: hidden;
       background: rgba(0,0,0,0.4);
+      width: 100%;
     }
     .card-header {
       background: rgba(0,0,0,0.2) !important;
@@ -108,17 +109,38 @@
       border: 1px solid rgba(255, 255, 255, 0.8);
       color: white;
       background: transparent;
+      font-size: 0.75rem !important;
+      padding: 0.25rem 0.5rem !important;
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none !important;
+      transition: all 0.15s ease;
     }
-    .btn-outline-action:hover {
+    .btn-outline-action:hover, .btn-outline-action:focus {
       background: rgba(255, 255, 255, 0.15);
-      border-color: white;
-      color: white;
+      border-color: rgba(255, 255, 255, 0.9) !important;
+      color: white !important;
+      outline: 0;
+    }
+    .btn-check:checked + .btn-outline-action {
+      background: rgba(50, 205, 50, 0.2);
+      border-color: rgba(50, 205, 50, 0.8) !important;
+      color: white !important;
+      box-shadow: 0 0 0 0.15rem rgba(50, 205, 50, 0.25) !important;
+      transition: all 0.15s ease;
+    }
+    .btn-check:checked + .btn-outline-action:hover {
+      background: rgba(50, 205, 50, 0.35);
+      border-color: rgba(50, 205, 50, 0.9) !important;
     }
     .stats-card {
       background: transparent;
       border-radius: 12px;
       padding: 0;
       text-align: center;
+      align-items: stretch;
+      justify-content: center;
       backdrop-filter: blur(13px);
       -webkit-backdrop-filter: blur(13px);
     }
@@ -174,6 +196,37 @@
       color: rgba(255, 255, 255, 0.8);
       text-transform: uppercase;
       letter-spacing: 1px;
+    }
+    .usage-display {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      width: 100%;
+    }
+    .usage-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.9);
+    }
+    .usage-bar-container {
+      width: 100%;
+      height: 8px;
+      min-height: 8px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 3px;
+      overflow: hidden;
+      flex-shrink: 0;
+      flex-grow: 0;
+    }
+    .usage-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.6);
+      transition: width 0.5s ease;
+    }
+    .usage-count {
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
     }
     .toast-container {
       position: fixed;
@@ -407,22 +460,28 @@
             </div>
             <div class="col-4">
               <div class="stats-card card h-100 d-flex flex-column" data-glass>
-                <div class="card-content flex-grow-1 justify-content-center align-items-center d-flex flex-column" style="padding:8px">
-                  <div class="stats-value" id="fiveHourUsage">--</div>
-                  <div class="stats-label">5h Usage</div>
-                  <div style="width:80%;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;margin-top:6px">
-                    <div id="fiveHourBar" style="height:100%;border-radius:3px;background:rgba(255,255,255,0.6);transition:width 0.5s;width:0%"></div>
+                <div class="card-content flex-grow-1 justify-content-center d-flex flex-column" style="padding:8px">
+                  <div class="usage-display">
+                    <div class="usage-text" id="fiveHourUsage">--</div>
+                    <div class="stats-label">5h Usage</div>
+                    <div class="usage-bar-container">
+                      <div class="usage-bar-fill" id="fiveHourBar" style="width:0%"></div>
+                    </div>
+                    <div class="usage-count" id="fiveHourCount"></div>
                   </div>
                 </div>
               </div>
             </div>
             <div class="col-4">
               <div class="stats-card card h-100 d-flex flex-column" data-glass>
-                <div class="card-content flex-grow-1 justify-content-center align-items-center d-flex flex-column" style="padding:8px">
-                  <div class="stats-value" id="weeklyUsage">--</div>
-                  <div class="stats-label">Weekly Usage</div>
-                  <div style="width:80%;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;margin-top:6px">
-                    <div id="weeklyBar" style="height:100%;border-radius:3px;background:rgba(255,255,255,0.6);transition:width 0.5s;width:0%"></div>
+                <div class="card-content flex-grow-1 justify-content-center d-flex flex-column" style="padding:8px">
+                  <div class="usage-display">
+                    <div class="usage-text" id="weeklyUsage">--</div>
+                    <div class="stats-label">Weekly Usage</div>
+                    <div class="usage-bar-container">
+                      <div class="usage-bar-fill" id="weeklyBar" style="width:0%"></div>
+                    </div>
+                    <div class="usage-count" id="weeklyCount"></div>
                   </div>
                 </div>
               </div>
@@ -508,10 +567,19 @@
                 <div class="fw-medium" id="startedAt">-</div>
               </div>
               <div class="mb-2">
-                <div class="form-check form-switch">
-                  <input class="form-check-input" type="checkbox" id="wallpaperToggle" onchange="toggleWallpaper()" checked>
-                  <label class="form-check-label text-muted" for="wallpaperToggle" style="cursor:pointer">Enable Wallpaper</label>
+                <label class="form-label" style="font-size:11px;margin-bottom:4px;color:rgba(255,255,255,0.6)">Wallpaper</label>
+                <div class="btn-group w-100" role="group" id="wallpaperGroup">
+                  <input type="radio" class="btn-check" name="wallpaper" id="wp-none" value="none" autocomplete="off">
+                  <label class="btn btn-outline-action" for="wp-none">None</label>
+                  <input type="radio" class="btn-check" name="wallpaper" id="wp-bing" value="bing" autocomplete="off" checked>
+                  <label class="btn btn-outline-action" for="wp-bing">Bing</label>
+                  <input type="radio" class="btn-check" name="wallpaper" id="wp-ai" value="ai" autocomplete="off">
+                  <label class="btn btn-outline-action" for="wp-ai">AI Image</label>
                 </div>
+              </div>
+              <div class="mb-2" id="aiPromptContainer" style="display:none">
+                <label class="form-label" style="font-size:10px;margin-bottom:2px;color:rgba(255,255,255,0.5)">AI Prompt</label>
+                <input type="text" class="form-control form-control-sm" id="aiPromptInput" placeholder="Image prompt..." style="background:rgba(0,0,0,0.3);border-color:rgba(255,255,255,0.15);color:white;font-size:11px">
               </div>
               <div class="mb-2">
                 <div class="form-check form-switch">
@@ -786,27 +854,15 @@
       setTimeout(() => toast.remove(), 3000);
     }
 
-    async function fetchBingWallpaper() {
-      const checked = document.getElementById('wallpaperToggle')?.checked !== false;
-      if (!checked) {
-        document.body.style.backgroundImage = 'none';
-        document.body.style.backgroundColor = '#0d1117';
-        return;
+    function applyWallpaper(source) {
+      const radio = document.querySelector('.btn-check[name="wallpaper"][value="' + source + '"]');
+      if (radio) radio.checked = true;
+      document.getElementById('aiPromptContainer').style.display = source === 'ai' ? 'block' : 'none';
+      if (source === 'none') {
+        document.body.style.background = '#0d1117';
+      } else {
+        document.body.style.background = 'url("/api/bg?t=' + Date.now() + '") center/cover no-repeat fixed';
       }
-      document.body.style.backgroundImage = 'url(/api/bg)';
-      document.body.style.backgroundRepeat = 'no-repeat';
-      document.body.style.backgroundPosition = 'center';
-      document.body.style.backgroundSize = 'cover';
-      document.body.style.backgroundAttachment = 'fixed';
-      document.body.style.backgroundColor = '#0d1117';
-    }
-
-    async function toggleWallpaper() {
-      const checked = document.getElementById('wallpaperToggle').checked;
-      fetchBingWallpaper();
-      try {
-        await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enableWallpaper: checked }) });
-      } catch (e) {}
     }
 
     async function loadConfiguration() {
@@ -820,7 +876,11 @@
           if (document.getElementById('listenAddr')) document.getElementById('listenAddr').value = configData.listenAddr || ':8080';
           if (document.getElementById('upstreamUrl')) document.getElementById('upstreamUrl').value = configData.upstreamBaseURL || 'https://agnes-ai.com/api';
           if (document.getElementById('requestTimeout')) document.getElementById('requestTimeout').value = configData.requestTimeout || '15m';
-          if (document.getElementById('wallpaperToggle')) document.getElementById('wallpaperToggle').checked = configData.enableWallpaper !== false;
+          const mode = configData.wallpaperMode || 'bing';
+          applyWallpaper(mode);
+          if (document.getElementById('aiPromptInput') && configData.wallpaperPrompt) {
+            document.getElementById('aiPromptInput').value = configData.wallpaperPrompt;
+          }
         }
         const modelsResponse = await fetch('/api/models');
         const modelsData = await modelsResponse.json();
@@ -1162,7 +1222,7 @@
         if (loginData.success) {
           statusEl.innerHTML = '<small class="text-success">Logged in as ' + (loginData.user?.email || username) + '</small>';
           showToast('Platform login successful', 'success');
-          setTimeout(() => { bootstrap.Modal.getInstance(document.getElementById('platformLoginModal')).hide(); checkHealth(true); if (document.getElementById('keysModal')?.classList.contains('show')) openKeysModal(); }, 1200);
+          setTimeout(() => { bootstrap.Modal.getInstance(document.getElementById('platformLoginModal')).hide(); checkHealth(true); fetchStepPlanStatus(); if (document.getElementById('keysModal')?.classList.contains('show')) openKeysModal(); }, 1200);
         } else {
           const errMsg = loginData.error || 'unknown';
           statusEl.innerHTML = '<small class="text-danger">Login failed: ' + errMsg + '</small>';
@@ -1183,6 +1243,7 @@
           config.platformUsername = '';
           config.platformToken = '';
           showToast('Logged out', 'success');
+          fetchStepPlanStatus();
           openKeysModal();
         }
       } catch (e) {
@@ -1204,87 +1265,86 @@
     let planSlides = [];
     let currentSlide = 0;
     let keyPlanDataCache = [];
+    let originalPlanFieldsetHTML = null;
 
     function renderPlanInto(data, prefix) {
       if (!data) return;
       const p = prefix || '';
-      const plan = data.plan;
+      const sub = data.subscription;
       const nameEl = document.getElementById('planName' + p);
       const expiryEl = document.getElementById('planExpiry' + p);
-      if (plan && plan.status === 1 && plan.subscription) {
-        const sub = plan.subscription;
-        const def = plan.plan_definition || {};
-        const name = sub.name || def.en_display?.description || 'Unknown';
-        const expiredAt = parseInt(sub.expired_at || '0', 10);
-        if (nameEl) { nameEl.textContent = name; nameEl.style.color = ''; nameEl.setAttribute('title', `${name} Plan`); }
-        if (expiredAt && expiryEl) {
-          const msLeft = (expiredAt * 1000) - Date.now();
+      if (sub) {
+        const name = sub.name || 'Unknown';
+        const periodEnd = sub.current_period_end;
+        if (nameEl) { nameEl.textContent = name; nameEl.style.color = sub.status === 'active' ? '#32CD32' : ''; nameEl.setAttribute('title', `${name} - ${sub.status}`); }
+        if (periodEnd && expiryEl) {
+          const msLeft = (new Date(periodEnd).getTime()) - Date.now();
           if (msLeft > 0) {
             const d = Math.floor(msLeft / 86400000);
             const h = Math.floor((msLeft % 86400000) / 3600000);
-            expiryEl.textContent = d + 'd ' + h + 'h left';
+            const m = Math.floor((msLeft % 3600000) / 60000);
+            expiryEl.textContent = `${d}d ${h}h ${m}m left`;
+            expiryEl.style.color = '';
           } else {
             expiryEl.textContent = 'expired';
             expiryEl.style.color = '#dc3545';
           }
         }
       } else {
-        if (nameEl) { nameEl.textContent = 'No Plan'; nameEl.style.color = ''; nameEl.setAttribute('title', 'No active subscription'); }
+        if (nameEl) { nameEl.textContent = 'No Plan'; nameEl.style.color = ''; nameEl.removeAttribute('title'); }
         if (expiryEl) expiryEl.textContent = '';
       }
-      const rl = data.rate_limit;
-      if (!rl) return;
-      const fiveHourLeft = rl.five_hour_usage_left_rate ?? 1;
-      const weeklyLeft = rl.weekly_usage_left_rate ?? 1;
-      const fiveHourReset = rl.five_hour_usage_reset_time;
-      const weeklyReset = rl.weekly_usage_reset_time;
-      const fiveHourUsed = Math.max(0, (1 - fiveHourLeft) * 100);
-      const weeklyUsed = Math.max(0, (1 - weeklyLeft) * 100);
-      const fiveEl = document.getElementById('fiveHourUsage' + p);
+      const weekly = data.weekly;
+      if (!weekly) return;
+      const weeklyUsedPct = weekly.usage_pct != null ? weekly.usage_pct : (weekly.limit > 0 ? (weekly.used / weekly.limit) * 100 : 0);
+      const weeklyMax = weekly.limit || '--';
+      const weeklyUsed = weekly.used || 0;
+      const weeklyReset = weekly.reset_at;
+      const weeklyCountEl = document.getElementById('weeklyCount' + p);
       const weekEl = document.getElementById('weeklyUsage' + p);
-      if (fiveEl) { fiveEl.textContent = fiveHourUsed.toFixed(1) + '%'; fiveEl.style.color = ''; }
-      if (weekEl) { weekEl.textContent = weeklyUsed.toFixed(1) + '%'; weekEl.style.color = ''; }
-      const fiveBar = document.getElementById('fiveHourBar' + p);
+      const fiveEl = document.getElementById('fiveHourUsage' + p);
+      const fiveCountEl = document.getElementById('fiveHourCount' + p);
+      const windowed = data.windowed;
+      if (windowed) {
+        const windowedUsedPct = windowed.usage_pct != null ? windowed.usage_pct : (windowed.limit > 0 ? (windowed.used / windowed.limit) * 100 : 0);
+        if (fiveEl) { fiveEl.innerHTML = '<strong>' + windowedUsedPct.toFixed(1) + '%</strong>'; }
+        if (fiveCountEl) fiveCountEl.textContent = '(' + (windowed.used || 0) + '/' + (windowed.limit || '--') + ')';
+        const fiveBar = document.getElementById('fiveHourBar' + p);
+        if (fiveBar) {
+          fiveBar.style.width = windowedUsedPct + '%';
+          fiveBar.style.background = 'rgba(255,255,255,0.6)';
+        }
+      }
+      if (weekEl) { weekEl.innerHTML = '<strong>' + weeklyUsedPct.toFixed(1) + '%</strong>'; }
+      if (weeklyCountEl) weeklyCountEl.textContent = '(' + weeklyUsed + '/' + weeklyMax + ')';
       const weekBar = document.getElementById('weeklyBar' + p);
-      if (fiveBar) {
-        fiveBar.style.width = fiveHourUsed + '%';
-        fiveBar.style.background = 'rgba(255,255,255,0.6)';
-      }
       if (weekBar) {
-        weekBar.style.width = weeklyUsed + '%';
+        weekBar.style.width = weeklyUsedPct + '%';
         weekBar.style.background = 'rgba(255,255,255,0.6)';
-      }
-      const fiveResetEl = document.getElementById('fiveHourReset' + p);
-      const weekResetEl = document.getElementById('weeklyReset' + p);
-      if (fiveHourReset && fiveResetEl) {
-        const msLeft = (parseInt(fiveHourReset) * 1000) - Date.now();
-        fiveResetEl.textContent = msLeft > 0 ? Math.floor(msLeft / 3600000) + 'h ' + Math.floor((msLeft % 3600000) / 60000) + 'm' : 'resetting...';
-      }
-      if (weeklyReset && weekResetEl) {
-        const msLeft = (parseInt(weeklyReset) * 1000) - Date.now();
-        weekResetEl.textContent = msLeft > 0 ? Math.floor(msLeft / 86400000) + 'd ' + Math.floor((msLeft % 86400000) / 3600000) + 'h' : 'resetting...';
       }
     }
 
     function renderCombined() {
-      if (!document.getElementById('planSlideshow')) return;
       const planCounts = {};
-      let totalFiveHourUsed = 0;
+      let totalWindowedUsed = 0;
       let totalWeeklyUsed = 0;
+      let totalWeeklyLimit = 0;
       let count = 0;
       for (let i = 0; i < keyPlanDataCache.length; i++) {
-        const p = '_' + (i + 1);
-        const nameEl = document.getElementById('planName' + p);
-        if (nameEl) {
-          const name = nameEl.textContent.trim();
-          if (name) planCounts[name] = (planCounts[name] || 0) + 1;
-        }
         const d = keyPlanDataCache[i];
-        if (d && d.rate_limit) {
-          const rl = d.rate_limit;
-          totalFiveHourUsed += Math.max(0, (1 - (rl.five_hour_usage_left_rate ?? 1)) * 100);
-          totalWeeklyUsed += Math.max(0, (1 - (rl.weekly_usage_left_rate ?? 1)) * 100);
-          count++;
+        if (d) {
+          const subName = d.subscription?.name;
+          if (subName) planCounts[subName] = (planCounts[subName] || 0) + 1;
+          if (d.windowed) {
+            const w = d.windowed;
+            totalWindowedUsed += w.limit > 0 ? (w.used / w.limit) * 100 : 0;
+            count++;
+          }
+          if (d.weekly) {
+            const wk = d.weekly;
+            totalWeeklyUsed += wk.used || 0;
+            totalWeeklyLimit += wk.limit || 0;
+          }
         }
       }
       const nameEl = document.getElementById('planName');
@@ -1293,25 +1353,46 @@
       if (planNames.length > 0) {
         const displayName = planNames.map(([n, c]) => (c > 1 ? c + 'x ' : '') + n).join(', ');
         nameEl.textContent = displayName;
+        nameEl.style.color = '';
         nameEl.setAttribute('title', displayName);
       } else {
         nameEl.textContent = 'No Plan';
+        nameEl.style.color = '';
         nameEl.removeAttribute('title');
       }
-      if (expiryEl) {
-        expiryEl.textContent = '';
-        expiryEl.style.display = 'none';
+      const firstData = keyPlanDataCache[0];
+      if (firstData?.subscription?.current_period_end && expiryEl) {
+        const periodEnd = firstData.subscription.current_period_end;
+        const msLeft = (new Date(periodEnd).getTime()) - Date.now();
+        if (msLeft > 0) {
+          const d = Math.floor(msLeft / 86400000);
+          const h = Math.floor((msLeft % 86400000) / 3600000);
+          const m = Math.floor((msLeft % 3600000) / 60000);
+          expiryEl.textContent = `${d}d ${h}h ${m}m left`;
+          expiryEl.style.color = '';
+          expiryEl.style.display = '';
+        } else {
+          expiryEl.textContent = 'expired';
+          expiryEl.style.color = '#dc3545';
+          expiryEl.style.display = '';
+        }
       }
       if (count > 0) {
-        const avgFive = totalFiveHourUsed / count;
-        const avgWeekly = totalWeeklyUsed / count;
-        document.getElementById('fiveHourUsage').textContent = avgFive.toFixed(1) + '%';
-        document.getElementById('weeklyUsage').textContent = avgWeekly.toFixed(1) + '%';
+        const avgWindowed = totalWindowedUsed / count;
+        let tW = 0, tL = 0;
+        for (const d of keyPlanDataCache) { if (d?.windowed) { tW += d.windowed.used || 0; tL += d.windowed.limit || 0; } }
+        document.getElementById('fiveHourUsage').innerHTML = '<strong>' + avgWindowed.toFixed(1) + '%</strong>';
+        const fiveHourCountEl = document.getElementById('fiveHourCount');
+        if (fiveHourCountEl) fiveHourCountEl.textContent = '(' + tW + '/' + (tL || '--') + ')';
+        const weeklyPct = totalWeeklyLimit > 0 ? (totalWeeklyUsed / totalWeeklyLimit) * 100 : 0;
+        document.getElementById('weeklyUsage').innerHTML = '<strong>' + weeklyPct.toFixed(1) + '%</strong>';
+        const weeklyCountEl = document.getElementById('weeklyCount');
+        if (weeklyCountEl) weeklyCountEl.textContent = '(' + totalWeeklyUsed + '/' + (totalWeeklyLimit || '--') + ')';
         const fiveBar = document.getElementById('fiveHourBar');
         const weekBar = document.getElementById('weeklyBar');
-        fiveBar.style.width = avgFive + '%';
+        fiveBar.style.width = avgWindowed + '%';
         fiveBar.style.background = 'rgba(255,255,255,0.6)';
-        weekBar.style.width = avgWeekly + '%';
+        weekBar.style.width = weeklyPct + '%';
         weekBar.style.background = 'rgba(255,255,255,0.6)';
       }
     }
@@ -1319,9 +1400,9 @@
     function buildSlideHTML(idx) {
       const p = '_' + idx;
       return `<div class="row text-center align-items-stretch">
-        <div class="col-4"><div class="stats-card card h-100 d-flex flex-column" data-glass><div class="card-content flex-grow-1 justify-content-center align-items-center d-flex flex-column" style="padding:8px"><div class="stats-value" id="planName${p}" title="Loading...">Loading...</div><div class="stats-label">Plan</div><div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:4px" id="planExpiry${p}">--</div></div></div></div>
-        <div class="col-4"><div class="stats-card card h-100 d-flex flex-column" data-glass><div class="card-content flex-grow-1 justify-content-center align-items-center d-flex flex-column" style="padding:8px"><div class="stats-value" id="fiveHourUsage${p}">--</div><div class="stats-label">5h Usage</div><div style="width:80%;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;margin-top:6px"><div id="fiveHourBar${p}" style="height:100%;border-radius:3px;background:rgba(255,255,255,0.6);transition:width 0.5s;width:0%"></div></div></div></div></div>
-        <div class="col-4"><div class="stats-card card h-100 d-flex flex-column" data-glass><div class="card-content flex-grow-1 justify-content-center align-items-center d-flex flex-column" style="padding:8px"><div class="stats-value" id="weeklyUsage${p}">--</div><div class="stats-label">Weekly Usage</div><div style="width:80%;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;margin-top:6px"><div id="weeklyBar${p}" style="height:100%;border-radius:3px;background:rgba(255,255,255,0.6);transition:width 0.5s;width:0%"></div></div></div></div></div>
+        <div class="col-4"><div class="stats-card card h-100 d-flex flex-column" data-glass><div class="card-content flex-grow-1 justify-content-center d-flex flex-column" style="padding:8px"><div class="stats-value" id="planName${p}" title="Loading...">Loading...</div><div class="stats-label">Plan</div><div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:4px" id="planExpiry${p}">--</div></div></div></div>
+        <div class="col-4"><div class="stats-card card h-100 d-flex flex-column" data-glass><div class="card-content flex-grow-1 justify-content-center d-flex flex-column" style="padding:8px"><div class="usage-display"><div class="usage-text" id="fiveHourUsage${p}">--</div><div class="stats-label">5h Usage</div><div class="usage-bar-container"><div class="usage-bar-fill" id="fiveHourBar${p}" style="width:0%"></div></div><div class="usage-count" id="fiveHourCount${p}"></div></div></div></div></div>
+        <div class="col-4"><div class="stats-card card h-100 d-flex flex-column" data-glass><div class="card-content flex-grow-1 justify-content-center d-flex flex-column" style="padding:8px"><div class="usage-display"><div class="usage-text" id="weeklyUsage${p}">--</div><div class="stats-label">Weekly Usage</div><div class="usage-bar-container"><div class="usage-bar-fill" id="weeklyBar${p}" style="width:0%"></div></div><div class="usage-count" id="weeklyCount${p}"></div></div></div></div></div>
       </div>`;
     }
 
@@ -1337,73 +1418,111 @@
     }
 
     async function fetchStepPlanStatus() {
+      const fieldset = document.getElementById('planFieldset');
+      if (!fieldset) return;
+
+      if (!originalPlanFieldsetHTML) {
+        originalPlanFieldsetHTML = fieldset.innerHTML;
+      }
+
       let realData = null;
       try {
-        const r = await fetch('/api/step-plan-status');
+        const r = await fetch('/api/step-plan-status?t=' + Date.now() + '&_=' + Math.random());
         if (r.ok) { realData = await r.json(); stepPlanData = realData; }
       } catch (e) {}
 
-      let tokenCount = 0;
-      try {
-        const hr = await fetch('/healthz');
-        if (hr.ok) {
-          const healthData = await hr.json();
-          tokenCount = (healthData.token_state || []).length;
-        }
-      } catch (e) {}
-
-      const fieldset = document.getElementById('planFieldset');
-      const hasNoPlan = !realData || !realData.plan || realData.plan.status !== 1 || !realData.plan.subscription;
-
-      if (hasNoPlan) {
-        fieldset.innerHTML = `<div class="no-plan-card">
-          <h5>How the Free Tier Works</h5>
-          <ul>
-            <li><strong>Indefinitely Free:</strong><br>The proprietary baseline models — such as Agnes-2.0-Flash — are free to use without a time trial or credit card.</li>
-            <li><strong>Dynamic Rate Limits:</strong><br>Rather than giving you a hard monthly number (like 1 million tokens), the platform throttles requests based on real-time server load. During peak hours, your generation speeds may slow down or briefly pause to prioritize paid developer traffic.</li>
-          </ul>
-          <p class="subscribe-text">Consider subscribing to keep the service up and available for everyone if you like it.</p>
-          <a href="https://platform.agnes-ai.com/subscribe/subscription?from=website" target="_blank">View Plans &amp; Pricing</a>
-        </div>`;
-        return;
+      // Always restore the plan slideshow structure so plan data is visible
+      if (fieldset.querySelector('#planSlideshow') === null) {
+        fieldset.innerHTML = originalPlanFieldsetHTML;
       }
 
       const slideshow = document.getElementById('planSlideshow');
       const dots = document.getElementById('planDots');
-      slideshow.querySelectorAll('.plan-slide').forEach((s, i) => { if (i > 0) s.remove(); });
-      dots.innerHTML = '';
+      if (slideshow) slideshow.querySelectorAll('.plan-slide').forEach((s, i) => { if (i > 0) s.remove(); });
+      if (dots) dots.innerHTML = '';
 
-      const hasMultipleKeys = tokenCount > 1;
+      planSlides = [];
+      keyPlanDataCache = [];
 
-      planSlides = [
-        { keyName: hasMultipleKeys ? 'Combined' : 'Plan', data: null },
-      ];
-      keyPlanDataCache = [realData];
+      if (realData && realData.has_plan) {
+        planSlides = [{ keyName: 'Plan', data: realData }];
+        keyPlanDataCache = [realData];
 
-      const combinedDot = document.createElement('span');
-      combinedDot.className = 'plan-dot active';
-      combinedDot.style.cssText = 'width:10px;height:10px;border-radius:2px;background:rgba(255,255,255,0.8);cursor:pointer;transition:background 0.3s';
-      combinedDot.onclick = () => goToSlide(0);
-      dots.appendChild(combinedDot);
+        // Directly render plan name and expiry
+        const nameEl = document.getElementById('planName');
+        const expiryEl = document.getElementById('planExpiry');
+        const sub = realData.subscription;
+        if (sub) {
+          if (nameEl) { nameEl.textContent = sub.name || 'Unknown'; nameEl.style.color = sub.status === 'active' ? '#32CD32' : ''; nameEl.setAttribute('title', sub.name + ' - ' + sub.status); }
+          if (sub.current_period_end && expiryEl) {
+            const msLeft = (new Date(sub.current_period_end).getTime()) - Date.now();
+            if (msLeft > 0) {
+              const d = Math.floor(msLeft / 86400000);
+              const h = Math.floor((msLeft % 86400000) / 3600000);
+              const m = Math.floor((msLeft % 3600000) / 60000);
+              expiryEl.textContent = d + 'd ' + h + 'h ' + m + 'm left';
+              expiryEl.style.color = '';
+              expiryEl.style.display = '';
+            } else {
+              expiryEl.textContent = 'expired';
+              expiryEl.style.color = '#dc3545';
+              expiryEl.style.display = '';
+            }
+          }
+        }
 
-      if (hasMultipleKeys && realData) {
-        planSlides.push({ keyName: 'Real', data: realData });
-        keyPlanDataCache.push(realData);
+        // Render usage bars
+        const w = realData.windowed;
+        if (w) {
+          const pct = w.limit > 0 ? (w.used / w.limit) * 100 : 0;
+          const fiveEl = document.getElementById('fiveHourUsage');
+          if (fiveEl) fiveEl.innerHTML = '<strong>' + pct.toFixed(1) + '%</strong>';
+          const fiveBar = document.getElementById('fiveHourBar');
+          if (fiveBar) fiveBar.style.width = pct + '%';
+          const fiveCountEl = document.getElementById('fiveHourCount');
+          if (fiveCountEl) fiveCountEl.textContent = '(' + (w.used || 0) + '/' + (w.limit || '--') + ')';
+        }
+        const wk = realData.weekly;
+        if (wk) {
+          const pct = wk.limit > 0 ? (wk.used / wk.limit) * 100 : 0;
+          const weekEl = document.getElementById('weeklyUsage');
+          if (weekEl) weekEl.innerHTML = '<strong>' + pct.toFixed(1) + '%</strong>';
+          const weekBar = document.getElementById('weeklyBar');
+          if (weekBar) weekBar.style.width = pct + '%';
+          const weekCountEl = document.getElementById('weeklyCount');
+          if (weekCountEl) weekCountEl.textContent = '(' + (wk.used || 0) + '/' + (wk.limit || '--') + ')';
+        }
 
-        const slide = document.createElement('div');
-        slide.className = 'plan-slide';
-        slide.innerHTML = buildSlideHTML(1);
-        slideshow.appendChild(slide);
-        const dot = document.createElement('span');
-        dot.className = 'plan-dot';
-        dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.3);cursor:pointer;transition:background 0.3s';
-        dot.onclick = () => goToSlide(1);
-        dots.appendChild(dot);
-        renderPlanInto(realData, '_1');
+        const combinedDot = document.createElement('span');
+        combinedDot.className = 'plan-dot active';
+        combinedDot.style.cssText = 'width:10px;height:10px;border-radius:2px;background:rgba(255,255,255,0.8);cursor:pointer;transition:background 0.3s';
+        combinedDot.onclick = () => goToSlide(0);
+        if (dots) dots.appendChild(combinedDot);
+
+        currentSlide = 0;
+      } else {
+        // No plan — replace fieldset with login/subscribe card
+        const loggedIn = realData?.logged_in;
+        const cardHtml = loggedIn
+          ? `<div class="glass-panel"></div>
+            <div class="no-plan-card" style="position:relative;z-index:5">
+              <h5>No Active Subscription</h5>
+              <p>You're logged in but don't have an active subscription. The free tier provides access to baseline models with dynamic rate limits.</p>
+              <p class="subscribe-text">Subscribe for higher rate limits and premium models.</p>
+              <a href="https://platform.agnes-ai.com/subscribe/subscription?from=dashboard" target="_blank" style="margin-right:12px">View Plans &amp; Pricing</a>
+              <button class="btn btn-outline-action" onclick="platformLogout()" style="font-size:12px"><i class="bi bi-box-arrow-right me-1"></i>Logout</button>
+            </div>`
+          : `<div class="glass-panel"></div>
+            <div class="no-plan-card" style="position:relative;z-index:5">
+              <h5>Login to View Your Plan</h5>
+              <p>Log in to your Agnes AI account to see subscription details, usage stats, and manage your plan.</p>
+              <button class="btn btn-outline-action" onclick="openPlatformLoginModal()" style="margin-bottom:12px"><i class="bi bi-person-fill me-1"></i>Login to Platform</button>
+              <p class="subscribe-text">Don't have an account?</p>
+              <a href="https://platform.agnes-ai.com/subscribe/subscription?from=dashboard" target="_blank">View Plans &amp; Pricing</a>
+            </div>`;
+        fieldset.innerHTML = cardHtml;
+        setTimeout(() => initLiquidGlass(), 50);
       }
-
-      renderCombined();
-      currentSlide = 0;
     }
 
     function toggleSection(name) {
@@ -1421,8 +1540,34 @@
       return div.innerHTML;
     }
 
+    document.getElementById('wallpaperGroup')?.addEventListener('change', async function(e) {
+      if (!e.target.matches('.btn-check')) return;
+      const mode = e.target.value;
+      try {
+        await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wallpaperMode: mode }),
+        });
+      } catch (e) {}
+      applyWallpaper(mode);
+    });
+
+    document.getElementById('aiPromptInput')?.addEventListener('change', async function() {
+      const mode = document.querySelector('input[name="wallpaper"]:checked')?.value;
+      if (mode !== 'ai') return;
+      try {
+        await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wallpaperPrompt: this.value }),
+        });
+        fetch('/api/generate-image', { method: 'POST' });
+      } catch (e) {}
+    });
+
     Promise.all([
-      loadConfiguration().then(() => fetchBingWallpaper()),
+      loadConfiguration(),
       checkHealth(),
       fetchStepPlanStatus(),
     ]).then(() => {

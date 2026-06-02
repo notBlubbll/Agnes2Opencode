@@ -27,6 +27,7 @@ AGNES-PROXY/
 - `API_KEY_ENV_VAR` — `AGNES_API_KEY`
 - `loadConfig()` — Loads `.config/config.json` with env var overrides (including `PLATFORM_USERNAME`, `PLATFORM_PASSWORD`)
 - `saveConfig()` — Writes config back to `.config/config.json` (including platform credentials)
+- `generateAiWallpaperToDisk()` — Generates AI image via `/v1/images/generations`, saves to `.cache/ai-paper.jpg`
 - `parseDuration()` — Parses duration strings like `15m`, `6h`, `30s`
 
 ### 2. UpstreamClient
@@ -73,7 +74,7 @@ AGNES-PROXY/
 - `handleModels(req, res)` — OpenAI-format model list
 - `handleChatCompletions(req, res)` — Parses body, calls `proxyChatRequest`
 - `handleAccountInfo(req, res)` — Returns platform user data from `/api/user/self`
-- `handleBg(req, res)` — Bing wallpaper proxy with daily cache
+- `handleBg(req, res)` — Wallpaper endpoint: serves Bing daily, AI-generated (`ai-paper.jpg`), or 204 (none)
 - `proxyChatRequest(res, payload, model)` — Core proxy: clone payload, normalize tools, forward to upstream
 
 ### 8. Request Router
@@ -83,7 +84,8 @@ Routes by pathname:
 - `/api/config` (GET/POST) — Config read/write (masks platformPassword, accepts platformUsername/platformPassword updates)
 - `/api/validate` (GET) → Validate API key
 - `/api/models` (GET) → Model list
-- `/api/bg` (GET) → Bing wallpaper image (cached daily)
+- `/api/bg` (GET) → Wallpaper endpoint: Bing daily, AI-generated image, or 204 (none)
+- `/api/generate-image` (POST) → Generate AI wallpaper, save to `.cache/ai-paper.jpg`
 - `/api/keys` (GET/POST) → Multi-key CRUD (add/update/delete with `{name, token}`)
 - `/api/account` (GET) → Platform user data (`{ logged_in, user }`)
 - `/api/login` (POST) → Platform login with `{ username, password }`
@@ -124,6 +126,7 @@ Routes by pathname:
 - **Model Tags** — Toggle models on/off with checkbox UI
 - **SS Mode** — `token-blurred` CSS class (blur on hover)
 - **Bing Wallpaper** — Daily rotating background with toggle
+- **AI Wallpaper** — Generated via Agnes AI image model, preloaded to disk for instant display
 - **Auto-refresh** — Health check every 15s
 - **Collapsible Sections** — Models, API Key, Quick Actions, Environment, Proxy Configuration
 

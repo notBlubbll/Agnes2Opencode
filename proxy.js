@@ -144,7 +144,8 @@ function loadConfig() {
     cacheTtl: parseDuration(rawConfig.CACHE_TTL || '60s') || 60000,
     cacheMaxSize: Math.max(0, rawConfig.CACHE_MAX_SIZE || 100),
     cacheEnabled: rawConfig.CACHE_ENABLED !== false,
-    enableWallpaper: rawConfig.ENABLE_WALLPAPER !== false,
+    wallpaperMode: rawConfig.WALLPAPER_MODE || 'bing',
+    wallpaperPrompt: rawConfig.WALLPAPER_PROMPT || 'realistic vibrant colorful mountain range landscape',
     platformToken: rawConfig.PLATFORM_TOKEN || '',
     platformUser: rawConfig.PLATFORM_USER || null,
     platformUsername: rawConfig.PLATFORM_USERNAME || '',
@@ -177,7 +178,8 @@ function saveConfig(cfg) {
     API_KEYS: cfg.apiKeys,
     TOKENS: cfg.tokens,
     ENABLED_MODELS: cfg.enabledModels,
-    ENABLE_WALLPAPER: cfg.enableWallpaper !== false,
+    WALLPAPER_MODE: cfg.wallpaperMode || 'bing',
+    WALLPAPER_PROMPT: cfg.wallpaperPrompt || 'realistic vibrant colorful mountain range landscape',
     CACHE_TTL: `${(cfg.cacheTtl || 60000) / 1000}s`,
     CACHE_MAX_SIZE: cfg.cacheMaxSize || 100,
     CACHE_ENABLED: cfg.cacheEnabled !== false,
@@ -729,7 +731,58 @@ async function handleAccountInfo(req, res) {
 
 async function handleStepPlanStatus(req, res) {
   if (req.method !== 'GET') { writeOpenAIError(res, 405, 'method not allowed', 'invalid_request_error', ''); return; }
-  writeJSON(res, 200, { message: 'Step plan status not available for Agnes AI' });
+  if (!platformSession.token) {
+    writeJSON(res, 200, { has_plan: false, plan_status: 'none', subscriptions: [], logged_in: false });
+    return;
+  }
+  try {
+    const resp = await fetch(`${PLATFORM_BASE_URL}/api/user/subscription`, {
+      headers: getPlatformHeaders(),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    const sub = data.data || (Array.isArray(data) ? data[0] : null);
+    if (!sub) { writeJSON(res, 200, { has_plan: false, plan_status: 'none', subscriptions: [], logged_in: true }); return; }
+    const statusMap = { active: 'active', pending: 'pending', expired: 'expired', cancelled: 'cancelled' };
+    const textGen = sub.usage?.text_generation;
+    const windowed = textGen?.windowed || {};
+    const weekly = textGen?.weekly || {};
+    const daily = textGen?.daily || {};
+    const imgGen = sub.usage?.image_generation;
+    const imgDaily = imgGen?.daily || {};
+    const subFeatures = sub.features || {};
+    writeJSON(res, 200, {
+      has_plan: true,
+      logged_in: true,
+      plan_status: statusMap[sub.status] || 'unknown',
+      subscription: {
+        name: sub.plan_name,
+        billing_cycle: sub.billing_cycle,
+        status: sub.status,
+        payment_method: sub.payment_method,
+        key_preview: sub.key_preview,
+        key_status: sub.key_status,
+        current_period_start: sub.current_period_start,
+        current_period_end: sub.current_period_end,
+      },
+      subscription_features: {
+        tps_normal: subFeatures.tps_normal,
+        tps_offpeak: subFeatures.tps_offpeak,
+        usage_multiplier: subFeatures.usage_multiplier,
+        claw_agents: subFeatures.claw_agents,
+        image_gen: subFeatures.image_gen,
+        video_gen: subFeatures.video_gen,
+        tools: subFeatures.tools,
+        mcp: subFeatures.mcp || [],
+      },
+      windowed: { used: windowed.used, limit: windowed.limit, usage_pct: windowed.usage_pct, reset_at: windowed.reset_at, reset_in_seconds: windowed.reset_in_seconds },
+      weekly: { used: weekly.used, limit: weekly.limit, usage_pct: weekly.usage_pct, reset_at: weekly.reset_at, reset_in_seconds: weekly.reset_in_seconds },
+      image_daily: { used: imgDaily.used, limit: imgDaily.limit, usage_pct: imgDaily.usage_pct, reset_at: imgDaily.reset_at, reset_in_seconds: imgDaily.reset_in_seconds },
+    });
+  } catch (e) {
+    writeJSON(res, 200, { has_plan: false, plan_status: 'error', error: e.message, subscriptions: [], logged_in: true });
+  }
 }
 
 async function handleHealthz(req, res) {
@@ -889,13 +942,14 @@ async function proxyChatRequest(res, payload, requestedModel) {
     }
 
     const errorBodyStr = (await readBodyWithDecompress(resp.body, resp.headers['content-encoding'])).toString();
-    if (isModelUnavailableError(errorBodyStr)) {
+    if (isModelUnavailableError(errorBodyStr) || isQueryEngineError(errorBodyStr)) {
       if (isLast) {
         console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-error:${resp.status}`);
         writePassthroughError(res, resp.status, errorBodyStr);
         return { retry: false };
       }
-      console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-retry:unavailable`);
+      const reason = isQueryEngineError(errorBodyStr) ? 'query_engine' : 'unavailable';
+      console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-retry:${reason}`);
       return { retry: true };
     }
     console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-error:${resp.status}`);
@@ -907,6 +961,10 @@ async function proxyChatRequest(res, payload, requestedModel) {
 function isModelUnavailableError(body) {
   const re = /this model is currently (unavaliable|unavailable)/i;
   return re.test(body);
+}
+
+function isQueryEngineError(body) {
+  return /not connected to the query engine/i.test(body);
 }
 
 const MAX_RETRIES = 3;
@@ -941,6 +999,57 @@ async function validateApiKey() {
   }
 }
 
+// --- AI Wallpaper Generation ---
+async function generateAiWallpaperToDisk() {
+  const cacheDir = path.join(__dirname, '.cache');
+  if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+  const aiFile = path.join(cacheDir, 'ai-paper.jpg');
+  const apiKey = config.apiKey || config.tokens?.[0]?.token || '';
+  if (!apiKey) throw new Error('no API key');
+
+  const prompt = config.wallpaperPrompt || 'realistic vibrant colorful mountain range landscape';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  const resp = await fetch(`${config.upstreamBaseURL}/v1/images/generations`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'agnes-image-2.1-flash',
+      prompt,
+      n: 1,
+      size: '1024x1024',
+    }),
+    signal: controller.signal,
+  });
+  clearTimeout(timer);
+  if (!resp.ok) throw new Error(`upstream ${resp.status}`);
+
+  const data = await resp.json();
+  let imageUrl = '';
+  let b64Data = '';
+
+  if (data.data && Array.isArray(data.data) && data.data[0]) {
+    const item = data.data[0];
+    if (item.url) imageUrl = item.url;
+    else if (item.b64_json) b64Data = item.b64_json;
+  }
+
+  if (b64Data) {
+    fs.writeFileSync(aiFile, Buffer.from(b64Data, 'base64'));
+  } else if (imageUrl) {
+    const imgResp = await fetch(imageUrl);
+    if (!imgResp.ok) throw new Error(`download ${imgResp.status}`);
+    const imgBuf = Buffer.from(await imgResp.arrayBuffer());
+    fs.writeFileSync(aiFile, imgBuf);
+  } else {
+    throw new Error('no image in response');
+  }
+}
+
 // --- Main Request Handler ---
 async function handleRequest(req, res) {
   try {
@@ -956,7 +1065,7 @@ async function handleRequest(req, res) {
     const dashboardPath = path.join(__dirname, 'dashboard.html');
     if (!fs.existsSync(dashboardPath)) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Dashboard not found'); return; }
     const html = fs.readFileSync(dashboardPath);
-    res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Length': html.length });
+    res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Length': html.length, 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' });
     res.end(html);
     return;
   }
@@ -970,7 +1079,8 @@ async function handleRequest(req, res) {
         if (newConfig.apiKey) config.apiKey = newConfig.apiKey;
         if (newConfig.apiKeys) config.apiKeys = newConfig.apiKeys;
         if (newConfig.listenAddr) config.listenAddr = newConfig.listenAddr;
-        if (newConfig.enableWallpaper !== undefined) config.enableWallpaper = newConfig.enableWallpaper;
+        if (newConfig.wallpaperMode) config.wallpaperMode = newConfig.wallpaperMode;
+        if (newConfig.wallpaperPrompt !== undefined) config.wallpaperPrompt = newConfig.wallpaperPrompt;
         if (Array.isArray(newConfig.enabledModels)) config.enabledModels = newConfig.enabledModels;
         if (Array.isArray(newConfig.tokens)) config.tokens = newConfig.tokens;
         if (newConfig.platformUsername !== undefined) config.platformUsername = newConfig.platformUsername;
@@ -1047,8 +1157,36 @@ async function handleRequest(req, res) {
   }
 
   if (pathname === '/api/bg' && req.method === 'GET') {
+    const mode = config.wallpaperMode || 'bing';
+    if (mode === 'none') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
     const cacheDir = path.join(__dirname, '.cache');
     if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+
+    if (mode === 'ai') {
+      const aiFile = path.join(cacheDir, 'ai-paper.jpg');
+      if (fs.existsSync(aiFile)) {
+        const imgData = fs.readFileSync(aiFile);
+        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': imgData.length, 'Cache-Control': 'no-cache' });
+        res.end(imgData);
+        generateAiWallpaperToDisk().then(() => console.log('[AI] Background generation done')).catch(e => console.error('[AI] Background generation failed:', e.message));
+      } else {
+        try {
+          await generateAiWallpaperToDisk();
+          const imgData = fs.readFileSync(aiFile);
+          res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': imgData.length, 'Cache-Control': 'no-cache' });
+          res.end(imgData);
+        } catch (e) {
+          res.writeHead(500);
+          res.end();
+        }
+      }
+      return;
+    }
+
     const imgCacheFile = path.join(cacheDir, 'wallpaper.jpg');
     const today = new Date().toISOString().split('T')[0];
     const cachedDate = fs.existsSync(imgCacheFile) ? fs.statSync(imgCacheFile).mtime.toISOString().split('T')[0] : '';
@@ -1085,6 +1223,16 @@ async function handleRequest(req, res) {
         res.end(buf);
         return;
       }
+      writeJSON(res, 500, { error: e.message });
+    }
+    return;
+  }
+
+  if (pathname === '/api/generate-image' && req.method === 'POST') {
+    try {
+      await generateAiWallpaperToDisk();
+      writeJSON(res, 200, { success: true, url: `/api/bg?t=${Date.now()}` });
+    } catch (e) {
       writeJSON(res, 500, { error: e.message });
     }
     return;
@@ -1141,6 +1289,8 @@ async function handleRequest(req, res) {
   }
 
   if (pathname === '/api/account') { await handleAccountInfo(req, res); return; }
+
+  if (pathname === '/api/step-plan-status') { await handleStepPlanStatus(req, res); return; }
 
   if (pathname === '/healthz') { await handleHealthz(req, res); return; }
   if (pathname === '/v1/models') { await handleModels(req, res); return; }
@@ -1296,7 +1446,20 @@ async function startServer() {
       user: config.platformUser,
       expiresAt: Date.now() + 24 * 60 * 60 * 1000,
     };
-    console.log(`[Platform] Restored session for ${config.platformUser?.email || 'unknown user'}`);
+    console.log(`[Platform] Restored session for ${config.platformUser?.email || 'unknown user'}, validating...`);
+    try {
+      await platformGetUserInfo();
+      console.log(`[Platform] Session valid`);
+    } catch (e) {
+      console.log(`[Platform] Session invalid (${e.message}), re-login...`);
+      platformSession = { token: null, user: null, expiresAt: 0 };
+      config.platformToken = '';
+      config.platformUser = null;
+      if (config.platformUsername && config.platformPassword) {
+        const lr = await loginToPlatform(config.platformUsername, config.platformPassword);
+        console.log(`[Platform] Re-login ${lr.success ? 'successful' : 'failed: ' + lr.message}`);
+      }
+    }
   } else if (config.platformUsername && config.platformPassword) {
     console.log('[Platform] No saved session, logging in with configured credentials...');
     const loginResult = await loginToPlatform(config.platformUsername, config.platformPassword);

@@ -20,6 +20,7 @@ OpenAI-compatible proxy server for [Agnes AI](https://agnes-ai.com), providing a
 - **Dynamic Model Fetch** — Fetches available models from `https://agnes-ai.com/api/v1/models`
 - **Response Caching** — LRU cache for non-streaming responses
 - **Multi-Key Support** — Rotate between multiple Agnes AI API keys
+- **AI Wallpaper** — Generate AI backgrounds via `agnes-image-2.1-flash`, preloaded to disk for instant display
 - **Zero Dependencies** — No npm packages required
 
 ## Available Models
@@ -91,9 +92,10 @@ Edit `.config/config.json` or set environment variables:
 | `CACHE_TTL` | Response cache TTL | `60s` |
 | `CACHE_MAX_SIZE` | Max cached responses | `100` |
 | `CACHE_ENABLED` | Enable response caching | `true` |
+| `WALLPAPER_MODE` | Wallpaper source: `none`, `bing`, or `ai` | `bing` |
+| `WALLPAPER_PROMPT` | Prompt for AI wallpaper generation | `realistic vibrant colorful mountain range landscape` |
 | `PLATFORM_USERNAME` | Agnes AI account email | — |
 | `PLATFORM_PASSWORD` | Agnes AI account password | — |
-| `ENABLE_WALLPAPER` | Bing wallpaper background | `true` |
 
 ### Platform Login
 
@@ -184,6 +186,7 @@ Access at `http://localhost:8080`:
 - **Model Management** — Toggle models on/off
 - **Key Manager** — Add/edit/delete API keys with inline editing
 - **Platform Login** — Login with Agnes AI account, view account info, logout
+- **Wallpaper Toggle** — Switch between None, Bing, and AI Image modes with configurable prompt
 - **Collapsible Sections** — Models, API Key, Quick Actions, Environment, Proxy Configuration
 
 ## API Endpoints
@@ -203,7 +206,8 @@ Access at `http://localhost:8080`:
 | `GET` / `POST` | `/api/config` | Read/write proxy configuration |
 | `GET` | `/api/validate` | Validate API key |
 | `GET` | `/api/models` | List available model IDs |
-| `GET` | `/api/bg` | Bing wallpaper image (cached daily) |
+| `GET` | `/api/bg` | Wallpaper image (Bing daily, AI-generated, or 204 none) |
+| `POST` | `/api/generate-image` | Generate AI wallpaper, save to `.cache/ai-paper.jpg` |
 | `GET` / `POST` | `/api/keys` | Multi-key CRUD (add/update/delete) |
 | `GET` | `/api/account` | Platform user data (`{ logged_in, user }`) |
 | `POST` | `/api/login` | Platform login with `{ username, password }` |
@@ -225,6 +229,7 @@ proxy.js
 ├── Tool Schema Norm.     — $ref resolution and schema normalization
 ├── HTTP Handlers         — OpenAI + management endpoints
 ├── Request Router        — Pathname-based routing
+├── AI Wallpaper          — Generates images via /v1/images/generations, preloads to disk
 ├── Session Tracking      — Fingerprint-based sticky sessions
 ├── Opencode Config       — Auto-configures opencode provider
 └── Server Startup        — Validation, platform login, config write, listen
@@ -234,7 +239,7 @@ dashboard.html
 ├── Model Management      — Toggle models on/off
 ├── Key Manager           — Add/edit/delete API keys + account info
 ├── Platform Login Modal  — Username/password login with status
-├── Bing Wallpaper        — Daily rotating background
+├── Wallpaper Toggle      — None / Bing / AI Image radio group + prompt input
 ├── Cache Stats           — Real-time cache performance
 └── Configuration Forms   — Listen addr, upstream URL, timeout
 ```
