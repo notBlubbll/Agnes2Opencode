@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agnes2Opencode Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --primary-color: #0d6efd;
+      --secondary-color: #6c757d;
+      --success-color: #32CD32;
+      --bs-success: #32CD32;
+      --bs-success-rgb: 50, 205, 50;
+      --danger-color: #dc3545;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 0;
+      background: black;
+    }
+    .dashboard-container {
+      position: relative;
+      z-index: 10;
+      max-width: 1200px;
+      margin: 0 auto;
+      overflow-x: hidden;
+    }
+    .card {
+      position: relative;
+      border: none;
+      border-radius: var(--glass-radius, 12px);
+      margin-bottom: 20px;
+      background: transparent !important;
+    }
+    .glass-panel {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      border-radius: inherit;
+      overflow: hidden;
+    }
+    .glass-panel::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      border-radius: inherit;
+      background-color: rgba(255,255,255,0.04);
+      pointer-events: none;
+    }
+    .card-content {
+      position: relative;
+      z-index: 3;
+      border-radius: inherit;
+      overflow: hidden;
+      background: rgba(0,0,0,0.4);
+    }
+    .card-header {
+      background: rgba(0,0,0,0.2) !important;
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-size: 14px;
+      color: white;
+      padding: 0.4rem 1.25rem;
+      position: relative;
+      z-index: 4;
+    }
+    .card-body {
+      padding: 0.5rem;
+      position: relative;
+      z-index: 4;
+      backdrop-filter: blur(13px) !important;
+      -webkit-backdrop-filter: blur(13px) !important;
+    }
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 8px;
+    }
+    .status-online { background-color: var(--success-color); box-shadow: 0 0 10px var(--success-color); }
+    .status-offline { background-color: var(--danger-color); box-shadow: 0 0 10px var(--danger-color); }
+    .status-unknown { background-color: var(--secondary-color); }
+    .token-blurred {
+      filter: blur(5px);
+      transition: filter 0.2s ease;
+    }
+    .token-blurred:hover {
+      filter: blur(0) !important;
+    }
+    .btn-white-bg {
+      background: white;
+      border: 1px solid white;
+      color: #0d1117;
+    }
+    .btn-white-bg:hover {
+      background: rgba(255, 255, 255, 0.85);
+      border-color: white;
+      color: #0d1117;
+    }
+    .btn-outline-action {
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      color: white;
+      background: transparent;
+    }
+    .btn-outline-action:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: white;
+      color: white;
+    }
+    .stats-card {
+      background: transparent;
+      border-radius: 12px;
+      padding: 0;
+      text-align: center;
+      backdrop-filter: blur(13px);
+      -webkit-backdrop-filter: blur(13px);
+    }
+    .plan-fieldset {
+      position: relative;
+      border: none;
+      border-radius: 12px;
+      padding: 16px 8px 8px;
+      margin-bottom: 20px;
+      background: rgba(0,0,0,0.2);
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+    }
+    .plan-fieldset-legend {
+      position: absolute;
+      top: -10px;
+      left: 16px;
+      background: #0d1117;
+      padding: 0 8px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.6);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      z-index: 5;
+    }
+    #planSlideshow { position: relative; z-index: 5; }
+    .plan-slide {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      pointer-events: none;
+      visibility: hidden;
+    }
+    .plan-slide.active {
+      opacity: 1;
+      pointer-events: auto;
+      position: relative;
+      visibility: visible;
+    }
+    .plan-dot {
+      cursor: pointer;
+      padding: 4px;
+    }
+    .plan-dot.active {
+      background: rgba(255,255,255,0.8) !important;
+    }
+    .stats-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: white;
+    }
+    .stats-label {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.8);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 1050;
+    }
+    .form-label {
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: rgba(255, 255, 255, 0.9);
+      margin-bottom: 6px;
+    }
+    .form-control, .form-select {
+      display: block;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: white;
+      padding: 0.375rem 0.75rem;
+      font-size: 1rem;
+      border-radius: 0.375rem;
+    }
+    .form-control:focus, .form-select:focus {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.4);
+      color: white;
+      outline: 0;
+      box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    }
+    .form-control::placeholder {
+      color: rgba(255, 255, 255, 0.6);
+    }
+    .text-muted {
+      color: rgba(255, 255, 255, 0.7) !important;
+    }
+    h4, h5, strong, .fw-medium {
+      color: white !important;
+    }
+    small {
+      color: rgba(255, 255, 255, 0.8) !important;
+    }
+    .collapsible-header {
+      cursor: pointer;
+      user-select: none;
+    }
+    .collapsible-header .toggle-icon {
+      transition: transform 0.2s ease;
+    }
+    .collapsible-header .toggle-icon.collapsed {
+      transform: rotate(-90deg);
+    }
+    .collapse-section {
+      transition: all 0.3s ease;
+    }
+    .collapse-section.collapsed {
+      display: none;
+    }
+    .pool-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .pool-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .pool-name {
+      font-weight: 600;
+      color: #58a6ff;
+      font-size: 0.95rem;
+    }
+    .pool-status {
+      padding: 3px 10px;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .model-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.03);
+      opacity: 0.5;
+      user-select: none;
+      transition: all 0.15s ease;
+      margin: 1.5px;
+    }
+    .model-tag.enabled {
+      border-color: rgba(50, 205, 50, 0.3);
+      background: rgba(50, 205, 50, 0.1);
+      opacity: 1;
+    }
+    .model-tag:hover { opacity: 0.8; }
+    .model-tag.enabled:hover { opacity: 1; }
+    .model-tag-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+    }
+    .model-tag-id {
+      font-size: 8px;
+      color: #fff;
+      white-space: nowrap;
+      opacity: 0.6;
+    }
+    .model-tag input[type="checkbox"] {
+      pointer-events: none;
+      transform: scale(0.75);
+      margin: 0;
+    }
+    .model-family-group {
+      margin-bottom: 6px;
+    }
+    .model-family-header {
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+      padding: 2px 0 1px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+    }
+    .model-family-header .badge {
+      font-size: 10px;
+      margin-left: 6px;
+      padding: 0 5px;
+      line-height: 1.4;
+    }
+    .no-plan-card {
+      background: rgba(0,0,0,0.4);
+      border-radius: 12px;
+      padding: 20px 24px;
+      border: 1px solid rgba(255,255,255,0.1);
+      text-align: left;
+      min-height: 80px;
+    }
+    .no-plan-card h5 {
+      color: rgba(255,255,255,0.95) !important;
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .no-plan-card p {
+      color: rgba(255,255,255,0.75);
+      font-size: 13px;
+      line-height: 1.6;
+      margin-bottom: 16px;
+      max-width: 800px;
+    }
+    .no-plan-card ul {
+      color: rgba(255,255,255,0.75);
+      font-size: 13px;
+      line-height: 1.6;
+      padding-left: 20px;
+      margin-bottom: 16px;
+      max-width: 800px;
+    }
+    .no-plan-card ul li {
+      margin-bottom: 8px;
+    }
+    .no-plan-card ul li strong {
+      color: rgba(255,255,255,0.9);
+    }
+    .no-plan-card .subscribe-text {
+      color: rgba(255,255,255,0.6);
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    .no-plan-card a {
+      color: #58a6ff;
+      text-decoration: underline;
+      font-weight: 500;
+    }
+    .no-plan-card a:hover {
+      color: #79c0ff;
+    }
+  </style>
+</head>
+<body>
+  <svg style="position:absolute;overflow:hidden;width:0;height:0" color-interpolation-filters="sRGB">
+    <defs id="glass-defs"></defs>
+  </svg>
+
+  <div class="container pt-2">
+  <div class="row justify-content-center">
+  <div class="dashboard-container col-11">
+    <div class="card sticky-top p-0" style="top:0;z-index:100" data-glass>
+      <div class="glass-panel"></div>
+      <div class="card-content px-2">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h4 class="mb-0"><i class="bi bi-lightning-charge-fill me-2"></i>Agnes2Opencode Dashboard</h4>
+          </div>
+          <div class="text-end">
+            <div>
+              <span id="statusIndicator" class="status-indicator status-unknown"></span>
+              <span id="statusText" class="fw-medium">Checking...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="plan-fieldset" data-glass id="planFieldset">
+      <div class="glass-panel"></div>
+      <span class="plan-fieldset-legend" id="planLegend">Plan</span>
+      <div id="planSlideshow" style="position:relative;min-height:120px">
+        <div class="plan-slide active" id="planSlide0">
+          <div class="row text-center align-items-stretch">
+            <div class="col-4">
+              <div class="stats-card card h-100 d-flex flex-column" data-glass>
+                <div class="card-content flex-grow-1 justify-content-center align-items-center d-flex flex-column" style="padding:8px">
+                  <div class="stats-value" id="planName" title="Loading...">Loading...</div>
+                  <div class="stats-label">Plan</div>
+                  <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:4px" id="planExpiry">--</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-4">
+              <div class="stats-card card h-100 d-flex flex-column" data-glass>
+                <div class="card-content flex-grow-1 justify-content-center align-items-center d-flex flex-column" style="padding:8px">
+                  <div class="stats-value" id="fiveHourUsage">--</div>
+                  <div class="stats-label">5h Usage</div>
+                  <div style="width:80%;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;margin-top:6px">
+                    <div id="fiveHourBar" style="height:100%;border-radius:3px;background:rgba(255,255,255,0.6);transition:width 0.5s;width:0%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-4">
+              <div class="stats-card card h-100 d-flex flex-column" data-glass>
+                <div class="card-content flex-grow-1 justify-content-center align-items-center d-flex flex-column" style="padding:8px">
+                  <div class="stats-value" id="weeklyUsage">--</div>
+                  <div class="stats-label">Weekly Usage</div>
+                  <div style="width:80%;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;margin-top:6px">
+                    <div id="weeklyBar" style="height:100%;border-radius:3px;background:rgba(255,255,255,0.6);transition:width 0.5s;width:0%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="planDots" style="display:flex;justify-content:center;gap:6px;margin-top:8px;position:relative;z-index:5"></div>
+    </div>
+
+    <div class="row">
+      <div class="col-lg-8">
+        <div class="card" data-glass data-section="models">
+          <div class="glass-panel"></div>
+          <div class="card-content">
+            <div class="card-header collapsible-header d-flex justify-content-between align-items-center" onclick="toggleSection('models')">
+              <span>
+                <i class="bi bi-chevron-down toggle-icon me-1"></i>
+                <i class="bi bi-cpu-fill me-2"></i>Available Models
+              </span>
+              <span class="badge bg-secondary" id="modelCountBadge">0</span>
+            </div>
+            <div class="card-body collapse-section" id="section-models">
+              <div id="modelsContainer"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-4">
+        <div class="card" data-glass data-section="tokens">
+          <div class="glass-panel"></div>
+          <div class="card-content">
+            <div class="card-header collapsible-header d-flex justify-content-between align-items-center" onclick="toggleSection('tokens')">
+              <span>
+                <i class="bi bi-chevron-down toggle-icon me-1"></i>
+                <i class="bi bi-key-fill me-2"></i>API Key
+              </span>
+              <span class="d-flex align-items-stretch gap-2" style="height:100%">
+                <span class="badge bg-secondary d-flex align-items-center" id="tokenCountBadge">0</span>
+                <button class="btn btn-sm btn-outline-action rounded-0" onclick="event.stopPropagation();openKeysModal()" style="font-size:11px"><i class="bi bi-pencil me-1"></i>Manage</button>
+              </span>
+            </div>
+            <div class="card-body collapse-section" id="section-tokens">
+              <div id="tokenPoolsContainer"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" data-glass data-section="actions">
+          <div class="glass-panel"></div>
+          <div class="card-content">
+            <div class="card-header collapsible-header" onclick="toggleSection('actions')">
+              <i class="bi bi-chevron-down toggle-icon collapsed me-1"></i>
+              <i class="bi bi-lightning-charge-fill me-2"></i>Quick Actions
+            </div>
+            <div class="card-body collapse-section collapsed" id="section-actions">
+              <div class="d-grid gap-2">
+                <button class="btn btn-outline-action" onclick="checkHealth()"><i class="bi bi-activity me-2"></i>Check Health</button>
+                <button class="btn btn-outline-action" onclick="testConnection()"><i class="bi bi-wifi me-2"></i>Test Connection</button>
+                <button class="btn btn-outline-action" onclick="refreshModels()"><i class="bi bi-arrow-clockwise me-2"></i>Refresh Models</button>
+                <button class="btn btn-outline-action" onclick="openPlatformLoginModal()"><i class="bi bi-person-fill me-2"></i>Platform Login</button>
+                <button class="btn btn-white-bg" onclick="saveConfiguration()"><i class="bi bi-save me-2"></i>Save Configuration</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" data-glass data-section="env">
+          <div class="glass-panel"></div>
+          <div class="card-content">
+            <div class="card-header collapsible-header" onclick="toggleSection('env')">
+              <i class="bi bi-chevron-down toggle-icon collapsed me-1"></i>
+              <i class="bi bi-info-circle-fill me-2"></i>Environment
+            </div>
+            <div class="card-body collapse-section collapsed" id="section-env">
+              <div class="mb-2">
+                <small class="text-muted">Runtime</small>
+                <div class="fw-medium" id="runtimeInfo">-</div>
+              </div>
+              <div class="mb-2">
+                <small class="text-muted">Started At</small>
+                <div class="fw-medium" id="startedAt">-</div>
+              </div>
+              <div class="mb-2">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="wallpaperToggle" onchange="toggleWallpaper()" checked>
+                  <label class="form-check-label text-muted" for="wallpaperToggle" style="cursor:pointer">Enable Wallpaper</label>
+                </div>
+              </div>
+              <div class="mb-2">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="blurTokensEnv" onchange="toggleBlurTokens(this.checked)">
+                  <label class="form-check-label text-muted" for="blurTokensEnv" style="cursor:pointer">SS Mode</label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" data-glass data-section="config">
+          <div class="glass-panel"></div>
+          <div class="card-content">
+            <div class="card-header collapsible-header" onclick="toggleSection('config')">
+              <i class="bi bi-chevron-down toggle-icon collapsed me-1"></i>
+              <i class="bi bi-gear-fill me-2"></i>Proxy Configuration
+            </div>
+            <div class="card-body collapse-section collapsed" id="section-config">
+              <form id="configForm">
+                <div class="row">
+                  <div class="col-6 mb-2">
+                    <label class="form-label" style="font-size:10px;margin-bottom:2px">Listen Address</label>
+                    <input type="text" class="form-control form-control-sm" id="listenAddr" value=":8080">
+                  </div>
+                  <div class="col-6 mb-2">
+                    <label class="form-label" style="font-size:10px;margin-bottom:2px">Timeout</label>
+                    <input type="text" class="form-control form-control-sm" id="requestTimeout" value="15m">
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="col-12 mb-2">
+                    <label class="form-label" style="font-size:10px;margin-bottom:2px">Upstream URL</label>
+                    <input type="url" class="form-control form-control-sm" id="upstreamUrl" value="https://agnes-ai.com/api">
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  </div>
+
+  <!-- Keys Management Modal -->
+  <div class="modal fade" id="keysModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content" style="background:#1a1d23;color:white;border:1px solid rgba(255,255,255,0.1)">
+        <div class="modal-header border-bottom-0">
+          <h5 class="modal-title"><i class="bi bi-key-fill me-2"></i>Manage Keys</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="keysModalBody">
+          <div id="keysList"></div>
+          <hr style="border-color:rgba(255,255,255,0.1)">
+          <div class="mb-3">
+            <label class="form-label">Add New Key</label>
+            <input type="text" class="form-control form-control-sm mb-2" id="newKeyName" placeholder="Key name (e.g. Key 2)">
+            <input type="text" class="form-control form-control-sm mb-2" id="newKeyToken" placeholder="API token">
+            <button class="btn btn-success btn-sm w-100" onclick="addKey()"><i class="bi bi-plus-circle me-1"></i>Add Key</button>
+          </div>
+        </div>
+        <div class="modal-footer border-top-0">
+          <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Platform Login Modal -->
+  <div class="modal fade" id="platformLoginModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="background:#1a1d23;color:white;border:1px solid rgba(255,255,255,0.1)">
+        <div class="modal-header border-bottom-0">
+          <h5 class="modal-title"><i class="bi bi-person-fill me-2"></i>Platform Login</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label" style="font-size:12px">Username (email)</label>
+            <input type="text" class="form-control form-control-sm" id="platLoginUsername" placeholder="email@example.com">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" style="font-size:12px">Password</label>
+            <input type="password" class="form-control form-control-sm" id="platLoginPassword" placeholder="password">
+          </div>
+          <div id="platLoginStatus" style="display:none" class="mb-2"></div>
+        </div>
+        <div class="modal-footer border-top-0">
+          <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-success btn-sm" onclick="savePlatformLogin()"><i class="bi bi-check-circle me-1"></i>Save & Login</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    console.log('[Glass] Script loaded');
+    const SURFACE_FNS = {
+      convex_squircle: (x) => Math.pow(1 - Math.pow(1 - x, 4), 0.25),
+    };
+
+    function calculateRefractionProfile(glassThickness, bezelWidth, heightFn, ior, samples) {
+      samples = samples || 128;
+      const eta = 1 / ior;
+      function refract(nx, ny) {
+        const dot = ny;
+        const k = 1 - eta * eta * (1 - dot * dot);
+        if (k < 0) return null;
+        const sq = Math.sqrt(k);
+        return [-(eta * dot + sq) * nx, eta - (eta * dot + sq) * ny];
+      }
+      const profile = new Float64Array(samples);
+      for (let i = 0; i < samples; i++) {
+        const x = i / samples;
+        const y = heightFn(x);
+        const dx = x < 1 ? 0.0001 : -0.0001;
+        const y2 = heightFn(x + dx);
+        const deriv = (y2 - y) / dx;
+        const mag = Math.sqrt(deriv * deriv + 1);
+        const ref = refract(-deriv / mag, -1 / mag);
+        if (!ref) { profile[i] = 0; continue; }
+        profile[i] = ref[0] * ((y * bezelWidth + glassThickness) / ref[1]);
+      }
+      return profile;
+    }
+
+    function generateDisplacementMap(w, h, radius, bezelWidth, profile, maxDisp) {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      const img = ctx.createImageData(w, h);
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) { d[i] = 128; d[i+1] = 128; d[i+2] = 0; d[i+3] = 255; }
+      const r = radius, rSq = r*r, r1Sq = (r+1)**2;
+      const rBSq = Math.max(r - bezelWidth, 0)**2;
+      const wB = w - r*2, hB = h - r*2, S = profile.length;
+      for (let y1 = 0; y1 < h; y1++) {
+        for (let x1 = 0; x1 < w; x1++) {
+          const x = x1 < r ? x1 - r : x1 >= w - r ? x1 - r - wB : 0;
+          const y = y1 < r ? y1 - r : y1 >= h - r ? y1 - r - hB : 0;
+          const dSq = x*x + y*y;
+          if (dSq > r1Sq || dSq < rBSq) continue;
+          const dist = Math.sqrt(dSq);
+          const fromSide = r - dist;
+          const op = dSq < rSq ? 1 : 1 - (dist - Math.sqrt(rSq)) / (Math.sqrt(r1Sq) - Math.sqrt(rSq));
+          if (op <= 0 || dist === 0) continue;
+          const cos = x / dist, sin = y / dist;
+          const bi = Math.min(((fromSide / bezelWidth) * S) | 0, S - 1);
+          const disp = profile[bi] || 0;
+          const dX = (-cos * disp) / maxDisp, dY = (-sin * disp) / maxDisp;
+          const idx = (y1 * w + x1) * 4;
+          d[idx] = (128 + dX * 127 * op + 0.5) | 0;
+          d[idx+1] = (128 + dY * 127 * op + 0.5) | 0;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+      return c.toDataURL();
+    }
+
+    function generateSpecularMap(w, h, radius, bezelWidth, angle) {
+      angle = angle != null ? angle : Math.PI / 3;
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      const img = ctx.createImageData(w, h);
+      const d = img.data; d.fill(0);
+      const r = radius, rSq = r*r, r1Sq = (r+1)**2;
+      const rBSq = Math.max(r - bezelWidth, 0)**2;
+      const wB = w - r*2, hB = h - r*2;
+      const sv = [Math.cos(angle), Math.sin(angle)];
+      for (let y1 = 0; y1 < h; y1++) {
+        for (let x1 = 0; x1 < w; x1++) {
+          const x = x1 < r ? x1 - r : x1 >= w - r ? x1 - r - wB : 0;
+          const y = y1 < r ? y1 - r : y1 >= h - r ? y1 - r - hB : 0;
+          const dSq = x*x + y*y;
+          if (dSq > r1Sq || dSq < rBSq) continue;
+          const dist = Math.sqrt(dSq);
+          const fromSide = r - dist;
+          const op = dSq < rSq ? 1 : 1 - (dist - Math.sqrt(rSq)) / (Math.sqrt(r1Sq) - Math.sqrt(rSq));
+          if (op <= 0 || dist === 0) continue;
+          const cos = x / dist, sin = -y / dist;
+          const dot = Math.abs(cos * sv[0] + sin * sv[1]);
+          const edge = Math.sqrt(Math.max(0, 1 - (1 - fromSide)**2));
+          const coeff = dot * edge;
+          const col = (255 * coeff) | 0;
+          const alpha = (col * coeff * op) | 0;
+          const idx = (y1 * w + x1) * 4;
+          d[idx] = col; d[idx+1] = col; d[idx+2] = col; d[idx+3] = alpha;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+      return c.toDataURL();
+    }
+
+    function initLiquidGlass() {
+      const cards = document.querySelectorAll('[data-glass]');
+      const defs = document.getElementById('glass-defs');
+      defs.innerHTML = '';
+      cards.forEach(c => {
+        const p = c.querySelector('.glass-panel');
+        if (p) { p.style.backdropFilter = ''; p.style.webkitBackdropFilter = ''; }
+      });
+      let filterIndex = 0;
+      cards.forEach(card => {
+        const panel = card.querySelector('.glass-panel');
+        if (!panel) return;
+        requestAnimationFrame(() => {
+          const rect = card.getBoundingClientRect();
+          if (rect.width < 2 || rect.height < 2) return;
+          const w = Math.round(rect.width);
+          const h = Math.round(rect.height);
+          const radius = 12, bezelW = 30, glassThick = 60, ior = 2.5;
+          const blurAmt = 0.3, specOpacity = 0.5, specSat = 4;
+          const heightFn = SURFACE_FNS.convex_squircle;
+          const profile = calculateRefractionProfile(glassThick, bezelW, heightFn, ior, 128);
+          const maxDisp = Math.max(...Array.from(profile).map(Math.abs)) || 1;
+          const dispUrl = generateDisplacementMap(w, h, radius, bezelW, profile, maxDisp);
+          const specUrl = generateSpecularMap(w, h, radius, bezelW * 2.5);
+          const scale = maxDisp * 1.0;
+          const filterId = 'lg-' + (filterIndex++);
+          const filter = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+          filter.setAttribute('id', filterId);
+          filter.setAttribute('x', '-20%');
+          filter.setAttribute('y', '-20%');
+          filter.setAttribute('width', '140%');
+          filter.setAttribute('height', '140%');
+          filter.innerHTML = `
+            <feGaussianBlur in="SourceGraphic" stdDeviation="${blurAmt}" result="blurred_source" />
+            <feImage href="${dispUrl}" x="0" y="0" width="${w}" height="${h}" result="disp_map" />
+            <feDisplacementMap in="blurred_source" in2="disp_map" scale="${scale}" xChannelSelector="R" yChannelSelector="G" result="displaced" />
+            <feColorMatrix in="displaced" type="saturate" values="${specSat}" result="displaced_sat" />
+            <feImage href="${specUrl}" x="0" y="0" width="${w}" height="${h}" result="spec_layer" />
+            <feComposite in="displaced_sat" in2="spec_layer" operator="in" result="spec_masked" />
+            <feComponentTransfer in="spec_layer" result="spec_faded"><feFuncA type="linear" slope="${specOpacity}" /></feComponentTransfer>
+            <feBlend in="spec_masked" in2="displaced" mode="normal" result="with_sat" />
+            <feBlend in="spec_faded" in2="with_sat" mode="normal" />
+          `;
+          defs.appendChild(filter);
+          panel.style.backdropFilter = `url(#${filterId})`;
+          panel.style.webkitBackdropFilter = `url(#${filterId})`;
+          void panel.offsetHeight;
+        });
+      });
+      setTimeout(() => {
+        cards.forEach(card => {
+          const p = card.querySelector('.glass-panel');
+          if (!p) return;
+          p.style.visibility = 'hidden';
+          void p.offsetHeight;
+          p.style.visibility = '';
+        });
+      }, 100);
+    }
+
+    let proxyData = null;
+    let config = {};
+    let models = [];
+    let modelMeta = {};
+    let blurTokensEnabled = false;
+
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `toast align-items-center text-white bg-${type} border-0 show`;
+      toast.innerHTML = `<div class="d-flex"><div class="toast-body">${message}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+      document.getElementById('toastContainer').appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    async function fetchBingWallpaper() {
+      const checked = document.getElementById('wallpaperToggle')?.checked !== false;
+      if (!checked) {
+        document.body.style.backgroundImage = 'none';
+        document.body.style.backgroundColor = '#0d1117';
+        return;
+      }
+      document.body.style.backgroundImage = 'url(/api/bg)';
+      document.body.style.backgroundRepeat = 'no-repeat';
+      document.body.style.backgroundPosition = 'center';
+      document.body.style.backgroundSize = 'cover';
+      document.body.style.backgroundAttachment = 'fixed';
+      document.body.style.backgroundColor = '#0d1117';
+    }
+
+    async function toggleWallpaper() {
+      const checked = document.getElementById('wallpaperToggle').checked;
+      fetchBingWallpaper();
+      try {
+        await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enableWallpaper: checked }) });
+      } catch (e) {}
+    }
+
+    async function loadConfiguration() {
+      try {
+        const healthResponse = await fetch('/healthz');
+        proxyData = await healthResponse.json();
+        const configResponse = await fetch('/api/config');
+        const configData = await configResponse.json();
+        if (configData) {
+          config = configData;
+          if (document.getElementById('listenAddr')) document.getElementById('listenAddr').value = configData.listenAddr || ':8080';
+          if (document.getElementById('upstreamUrl')) document.getElementById('upstreamUrl').value = configData.upstreamBaseURL || 'https://agnes-ai.com/api';
+          if (document.getElementById('requestTimeout')) document.getElementById('requestTimeout').value = configData.requestTimeout || '15m';
+          if (document.getElementById('wallpaperToggle')) document.getElementById('wallpaperToggle').checked = configData.enableWallpaper !== false;
+        }
+        const modelsResponse = await fetch('/api/models');
+        const modelsData = await modelsResponse.json();
+        if (modelsData && modelsData.models) { models = modelsData.allModels || modelsData.models; modelMeta = modelsData.meta || {}; renderModels(modelsData.models); }
+        renderTokenPools();
+        updateStats();
+      } catch (error) {
+        showToast('Failed to load configuration', 'danger');
+      }
+    }
+
+    let editingIndex = -1;
+    let deleteIndex = -1;
+    let accountData = null;
+
+    async function openKeysModal() {
+      try {
+        const [keysResp, acctResp] = await Promise.all([fetch('/api/keys'), fetch('/api/account')]);
+        const data = await keysResp.json();
+        accountData = await acctResp.json();
+        const keys = data.keys || [];
+        document.getElementById('tokenCountBadge').textContent = keys.length;
+        editingIndex = -1;
+        deleteIndex = -1;
+        renderKeysList(keys);
+        const modal = new bootstrap.Modal(document.getElementById('keysModal'));
+        modal.show();
+      } catch (e) {
+        showToast('Failed to load keys', 'danger');
+      }
+    }
+
+    function renderKeysList(keys) {
+      const container = document.getElementById('keysList');
+      if (!keys || keys.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center py-3">No keys configured</p>';
+        return;
+      }
+      const blurClass = blurTokensEnabled ? 'token-blurred' : '';
+      const acctHtml = accountData && accountData.logged_in ? `<div class="mb-2 p-2" style="background:rgba(255,255,255,0.05);border-radius:8px;border:1px solid rgba(255,255,255,0.1);font-size:0.8rem">
+        <div class="d-flex justify-content-between align-items-center" style="margin-bottom:4px"><span style="color:rgba(255,255,255,0.5)"><i class="bi bi-person-circle me-1"></i>Platform Account</span><button class="btn btn-sm" style="background:rgba(220,53,69,0.2);color:#dc3545;border:none;font-size:0.7rem;padding:2px 8px" onclick="platformLogout()"><i class="bi bi-box-arrow-right me-1"></i>Logout</button></div>
+        <div>User: <span class="${blurClass}">${escapeHtml(accountData.user?.username || accountData.user?.email || '-')}</span></div>
+        <div>Email: <span>${escapeHtml(accountData.user?.email || '-')}</span></div>
+        <div>Status: <span style="color:${accountData.user?.is_active ? '#32CD32' : '#dc3545'}">${accountData.user?.is_active ? 'Active' : 'Inactive'}</span></div>
+        ${accountData.user?.created_at ? `<div>Joined: <span>${escapeHtml(accountData.user.created_at)}</span></div>` : ''}
+        ${accountData.user?.last_login ? `<div>Last login: <span>${escapeHtml(accountData.user.last_login)}</span></div>` : ''}
+      </div>` : `<div class="mb-2 p-2" style="background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.08);font-size:0.8rem">
+        <div class="d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-person me-1"></i>No platform account logged in</span><button class="btn btn-sm" style="background:rgba(40,167,69,0.2);color:#28a745;border:none;font-size:0.7rem;padding:2px 8px" onclick="bootstrap.Modal.getInstance(document.getElementById('keysModal'))?.hide();setTimeout(openPlatformLoginModal,300)"><i class="bi bi-box-arrow-in-right me-1"></i>Login</button></div>
+      </div>`;
+      container.innerHTML = acctHtml + keys.map((k, i) => {
+        if (editingIndex === i) {
+          return `<div class="pool-card">
+            <div class="mb-2">
+              <label class="form-label" style="font-size:10px">Name</label>
+              <input type="text" class="form-control form-control-sm" id="editKeyName" value="${escapeHtml(k.name || '')}">
+            </div>
+            <div class="mb-2">
+              <label class="form-label" style="font-size:10px">Token</label>
+              <input type="text" class="form-control form-control-sm" id="editKeyToken" value="${escapeHtml(k.token || '')}">
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm btn-success" onclick="saveEditKey(${i})"><i class="bi bi-check me-1"></i>Save</button>
+              <button class="btn btn-sm btn-secondary" onclick="cancelEditKey()"><i class="bi bi-x me-1"></i>Cancel</button>
+            </div>
+          </div>`;
+        }
+        const maskedToken = k.token ? k.token.substring(0, 4) + '...' + k.token.substring(k.token.length - 4) : '';
+        const isDeleting = deleteIndex === i;
+        return `<div class="pool-card">
+          <div class="pool-header">
+            <div class="pool-name">${escapeHtml(k.name || 'Unnamed')}</div>
+            <div>
+              <button class="btn btn-sm btn-outline-action me-1" onclick="startEditKey(${i})" title="Edit"><i class="bi bi-pencil"></i></button>
+              <button class="btn btn-sm" style="background:rgba(220,53,69,0.2);color:#dc3545;border:none" onclick="startDeleteKey(${i})" title="Delete"><i class="bi bi-trash"></i></button>
+            </div>
+          </div>
+          <div style="font-size:0.8rem;color:rgba(255,255,255,0.7)">
+            <div>Token: <span class="${blurClass}" title="${escapeHtml(k.token || '')}">${maskedToken || '(empty)'}</span></div>
+            <div>User: <span class="${blurClass}" title="${escapeHtml(config?.platformUsername || '')}">${config?.platformUsername || '(not logged in)'}</span></div>
+          </div>
+          ${isDeleting ? `<div class="mt-2 d-flex gap-2 align-items-center" style="font-size:0.85rem;color:#dc3545"><i class="bi bi-exclamation-triangle"></i> Delete this key?</div>
+            <div class="d-flex gap-2 mt-1">
+              <button class="btn btn-sm" style="background:#dc3545;color:white;border:none" onclick="confirmDeleteKey(${i})"><i class="bi bi-trash me-1"></i>Delete</button>
+              <button class="btn btn-sm btn-secondary" onclick="cancelDeleteKey()">Cancel</button>
+            </div>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    async function addKey() {
+      const name = document.getElementById('newKeyName').value.trim() || ('Key ' + (document.querySelectorAll('#keysList .pool-card').length + 1));
+      const token = document.getElementById('newKeyToken').value.trim();
+      if (!token) { showToast('Token is required', 'warning'); return; }
+      try {
+        const r = await fetch('/api/keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'add', name, token })
+        });
+        const data = await r.json();
+        if (data.success) {
+          document.getElementById('newKeyName').value = '';
+          document.getElementById('newKeyToken').value = '';
+          renderKeysList(data.keys);
+          showToast('Key added', 'success');
+          loadConfiguration();
+        } else {
+          showToast('Failed: ' + data.error, 'danger');
+        }
+      } catch (e) { showToast('Failed to add key', 'danger'); }
+    }
+
+    function startEditKey(index) {
+      editingIndex = index;
+      deleteIndex = -1;
+      fetch('/api/keys').then(d => d.json()).then(data => {
+        renderKeysList(data.keys);
+        const key = data.keys?.[index];
+        if (key?.session) {
+          setTimeout(() => loadSessionStatus(index, 'edit'), 100);
+        }
+      });
+    }
+
+    function cancelEditKey() {
+      editingIndex = -1;
+      fetch('/api/keys').then(d => d.json()).then(data => renderKeysList(data.keys));
+    }
+
+    async function saveEditKey(index) {
+      const name = document.getElementById('editKeyName').value.trim();
+      const token = document.getElementById('editKeyToken').value.trim();
+      try {
+        const r = await fetch('/api/keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'update', index, name, token })
+        });
+        const data = await r.json();
+        if (data.success) {
+          editingIndex = -1;
+          renderKeysList(data.keys);
+          showToast('Key updated', 'success');
+          loadConfiguration();
+        } else {
+          showToast('Failed: ' + data.error, 'danger');
+        }
+      } catch (e) { showToast('Failed to update key', 'danger'); }
+    }
+
+    function startDeleteKey(index) {
+      deleteIndex = index;
+      editingIndex = -1;
+      fetch('/api/keys').then(d => d.json()).then(data => renderKeysList(data.keys));
+    }
+
+    function cancelDeleteKey() {
+      deleteIndex = -1;
+      fetch('/api/keys').then(d => d.json()).then(data => renderKeysList(data.keys));
+    }
+
+    async function confirmDeleteKey(index) {
+      try {
+        const r = await fetch('/api/keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'delete', index })
+        });
+        const data = await r.json();
+        if (data.success) {
+          deleteIndex = -1;
+          renderKeysList(data.keys);
+          showToast('Key deleted', 'success');
+          loadConfiguration();
+        } else {
+          showToast('Failed: ' + data.error, 'danger');
+        }
+      } catch (e) { showToast('Failed to delete key', 'danger'); }
+    }
+
+    function renderTokenPools() {
+      const container = document.getElementById('tokenPoolsContainer');
+      if (!proxyData || !proxyData.token_state || proxyData.token_state.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-4">
+            <i class="bi bi-key" style="font-size:2rem;color:rgba(255,255,255,0.4)"></i>
+            <p class="mt-2 text-muted">No tokens detected</p>
+          </div>`;
+        return;
+      }
+      document.getElementById('tokenCountBadge').textContent = proxyData.token_state.length;
+      const blurClass = blurTokensEnabled ? 'token-blurred' : '';
+      container.innerHTML = proxyData.token_state.map(pool => {
+        const status = pool.status || 'none';
+        const statusClass = status === 'active' ? 'status-online' : 'status-offline';
+        const statusText = status.charAt(0).toUpperCase() + status.slice(1);
+        const maskedPoolToken = pool.token ? pool.token.substring(0, 4) + '...' + pool.token.substring(pool.token.length - 4) : '(empty)';
+        const maskedPoolSession = pool.session ? pool.session.substring(0, 4) + '...' + pool.session.substring(pool.session.length - 4) : '';
+        const sessInfo = pool.has_session ? `<div>Session: <span class="${blurClass}" title="${escapeHtml(pool.session || '')}">${maskedPoolSession}</span></div>` : '';
+        return `<div class="pool-card"><div class="pool-header"><div class="pool-name">${pool.name}</div><div class="pool-status ${statusClass}">${statusText}</div></div><div style="font-size:0.8rem;color:rgba(255,255,255,0.7)"><div>Token: <span class="${blurClass}" title="${escapeHtml(pool.token || '')}">${maskedPoolToken}</span></div>${sessInfo}</div></div>`;
+      }).join('');
+    }
+
+    function renderModels(enabledModels) {
+      const container = document.getElementById('modelsContainer');
+      document.getElementById('modelCountBadge').textContent = models.length;
+      if (models.length === 0) { container.innerHTML = '<p class="text-muted">No models available</p>'; return; }
+      const enabledSet = new Set(enabledModels || models);
+      const groups = {};
+      models.forEach((model, idx) => {
+        let family = 'other';
+        if (model.startsWith('step-image')) family = 'step-image';
+        else if (model.startsWith('stepaudio')) family = 'stepaudio';
+        else if (model.startsWith('step')) family = 'step';
+        if (!groups[family]) groups[family] = [];
+        groups[family].push({ model, idx });
+      });
+      const familyOrder = Object.keys(groups).sort();
+      container.innerHTML = familyOrder.map(family => {
+        const items = groups[family];
+        return `<div class="model-family-group"><div class="model-family-header">${escapeHtml(family)} <span class="badge bg-secondary">${items.length}</span></div><div style="display:flex;flex-wrap:wrap;gap:3px">${items.map(({ model, idx }) => {
+          const enabled = enabledSet.has(model);
+          const meta = modelMeta[model] || {};
+          const displayName = meta.name || model;
+          const caps = [];
+          if (meta.reasoning) caps.push('reasoning');
+          if (meta.tool_call) caps.push('tools');
+          if (meta.attachment) caps.push('vision');
+          if (meta.modalities) {
+            const ins = (meta.modalities.input || []).filter(m => m !== 'text');
+            const outs = (meta.modalities.output || []).filter(m => m !== 'text');
+            if (ins.length) caps.push(ins.join('+') + ' in');
+            if (outs.length) caps.push(outs.join('+') + ' out');
+          }
+          if (meta.limit && meta.limit.context) caps.push((meta.limit.context / 1000) + 'K ctx');
+          const capStr = caps.length ? '<div class="model-tag-id">' + escapeHtml(caps.join(' · ')) + '</div>' : '';
+          return `<div class="model-tag${enabled ? ' enabled' : ''}" onclick="toggleModel(${idx})" id="model-${idx}"><input type="checkbox" class="form-check-input"${enabled ? ' checked' : ''}><div><div class="model-tag-name">${escapeHtml(displayName)}</div><div class="model-tag-id" title="${escapeHtml(model)}">${escapeHtml(model)}</div>${capStr}</div></div>`;
+        }).join('')}</div></div>`;
+      }).join('');
+    }
+
+    async function toggleModel(idx) {
+      const tag = document.getElementById(`model-${idx}`);
+      const checkbox = tag.querySelector('input[type="checkbox"]');
+      const isEnabled = tag.classList.contains('enabled');
+      if (isEnabled) { tag.classList.remove('enabled'); checkbox.checked = false; }
+      else { tag.classList.add('enabled'); checkbox.checked = true; }
+      const enabledModels = models.filter((_, i) => document.getElementById(`model-${i}`).classList.contains('enabled'));
+      const displayName = (modelMeta[models[idx]] || {}).name || models[idx];
+      showToast(`${displayName} ${isEnabled ? 'disabled' : 'enabled'}`, 'info');
+      try {
+        const resp = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabledModels }) });
+        const data = await resp.json();
+        if (!data.success) showToast('Failed to save model settings', 'danger');
+      } catch (e) { showToast('Failed to save model settings', 'danger'); }
+    }
+
+    function toggleBlurTokens(checked) {
+      blurTokensEnabled = checked;
+      renderTokenPools();
+    }
+
+    async function checkHealth(silent = false) {
+      try {
+        const response = await fetch('/healthz');
+        const data = await response.json();
+        if (data.ok) {
+          proxyData = data;
+          document.getElementById('statusIndicator').className = 'status-indicator status-online';
+          document.getElementById('statusText').textContent = 'Online';
+          renderTokenPools();
+          updateStats();
+          if (!silent) showToast('Proxy is healthy', 'success');
+        } else {
+          throw new Error('Unhealthy status');
+        }
+      } catch (error) {
+        document.getElementById('statusIndicator').className = 'status-indicator status-offline';
+        document.getElementById('statusText').textContent = 'Offline';
+        if (!silent) showToast('Proxy health check failed', 'danger');
+      }
+    }
+
+    async function testConnection() {
+      try {
+        const response = await fetch('/v1/models');
+        if (response.ok) {
+          const data = await response.json();
+          showToast(`Connected! ${data.data?.length || 0} models available`, 'success');
+        } else {
+          throw new Error('Connection failed');
+        }
+      } catch (error) {
+        showToast('Connection test failed', 'danger');
+      }
+    }
+
+    function refreshModels() {
+      loadConfiguration();
+      showToast('Models refreshed', 'info');
+    }
+
+    async function saveConfiguration() {
+      const newConfig = {
+        listenAddr: document.getElementById('listenAddr').value,
+        upstreamBaseURL: document.getElementById('upstreamUrl').value,
+        requestTimeout: document.getElementById('requestTimeout').value,
+      };
+      try {
+        const response = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newConfig) });
+        const data = await response.json();
+        if (data.success) { showToast('Configuration saved successfully', 'success'); config = data.config; }
+        else { showToast('Failed to save: ' + data.error, 'danger'); }
+      } catch (error) {
+        showToast('Failed to save configuration', 'danger');
+      }
+    }
+
+    function openPlatformLoginModal() {
+      document.getElementById('platLoginUsername').value = config?.platformUsername || '';
+      document.getElementById('platLoginPassword').value = '';
+      document.getElementById('platLoginStatus').style.display = 'none';
+      new bootstrap.Modal(document.getElementById('platformLoginModal')).show();
+    }
+
+    async function savePlatformLogin() {
+      const username = document.getElementById('platLoginUsername').value.trim();
+      const password = document.getElementById('platLoginPassword').value;
+      const statusEl = document.getElementById('platLoginStatus');
+      if (!username || !password) { statusEl.style.display = 'block'; statusEl.innerHTML = '<small class="text-danger">Username and password are required</small>'; return; }
+      statusEl.style.display = 'block';
+      statusEl.innerHTML = '<small class="text-info">Saving and logging in...</small>';
+      try {
+        const cfgResp = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ platformUsername: username, platformPassword: password }) });
+        const cfgData = await cfgResp.json();
+        if (!cfgData.success) { statusEl.innerHTML = '<small class="text-danger">Failed to save: ' + (cfgData.error || 'unknown') + '</small>'; return; }
+        const loginResp = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+        const loginData = await loginResp.json();
+        if (loginData.success) {
+          statusEl.innerHTML = '<small class="text-success">Logged in as ' + (loginData.user?.email || username) + '</small>';
+          showToast('Platform login successful', 'success');
+          setTimeout(() => { bootstrap.Modal.getInstance(document.getElementById('platformLoginModal')).hide(); checkHealth(true); if (document.getElementById('keysModal')?.classList.contains('show')) openKeysModal(); }, 1200);
+        } else {
+          const errMsg = loginData.error || 'unknown';
+          statusEl.innerHTML = '<small class="text-danger">Login failed: ' + errMsg + '</small>';
+          showToast('Login failed: ' + errMsg, 'danger');
+        }
+      } catch (e) {
+        statusEl.innerHTML = '<small class="text-danger">Error: ' + e.message + '</small>';
+        showToast('Login error: ' + e.message, 'danger');
+      }
+    }
+
+    async function platformLogout() {
+      try {
+        const r = await fetch('/api/logout', { method: 'POST' });
+        const data = await r.json();
+        if (data.success) {
+          accountData = null;
+          config.platformUsername = '';
+          config.platformToken = '';
+          showToast('Logged out', 'success');
+          openKeysModal();
+        }
+      } catch (e) {
+        showToast('Logout failed', 'danger');
+      }
+    }
+
+    function updateStats() {
+      if (!proxyData) return;
+      if (proxyData.runtime) {
+        document.getElementById('runtimeInfo').textContent = proxyData.runtime + ' v' + proxyData.runtime_version;
+      }
+      if (proxyData.started_at) {
+        document.getElementById('startedAt').textContent = new Date(proxyData.started_at).toLocaleString();
+      }
+    }
+
+    let stepPlanData = null;
+    let planSlides = [];
+    let currentSlide = 0;
+    let keyPlanDataCache = [];
+
+    function renderPlanInto(data, prefix) {
+      if (!data) return;
+      const p = prefix || '';
+      const plan = data.plan;
+      const nameEl = document.getElementById('planName' + p);
+      const expiryEl = document.getElementById('planExpiry' + p);
+      if (plan && plan.status === 1 && plan.subscription) {
+        const sub = plan.subscription;
+        const def = plan.plan_definition || {};
+        const name = sub.name || def.en_display?.description || 'Unknown';
+        const expiredAt = parseInt(sub.expired_at || '0', 10);
+        if (nameEl) { nameEl.textContent = name; nameEl.style.color = ''; nameEl.setAttribute('title', `${name} Plan`); }
+        if (expiredAt && expiryEl) {
+          const msLeft = (expiredAt * 1000) - Date.now();
+          if (msLeft > 0) {
+            const d = Math.floor(msLeft / 86400000);
+            const h = Math.floor((msLeft % 86400000) / 3600000);
+            expiryEl.textContent = d + 'd ' + h + 'h left';
+          } else {
+            expiryEl.textContent = 'expired';
+            expiryEl.style.color = '#dc3545';
+          }
+        }
+      } else {
+        if (nameEl) { nameEl.textContent = 'No Plan'; nameEl.style.color = ''; nameEl.setAttribute('title', 'No active subscription'); }
+        if (expiryEl) expiryEl.textContent = '';
+      }
+      const rl = data.rate_limit;
+      if (!rl) return;
+      const fiveHourLeft = rl.five_hour_usage_left_rate ?? 1;
+      const weeklyLeft = rl.weekly_usage_left_rate ?? 1;
+      const fiveHourReset = rl.five_hour_usage_reset_time;
+      const weeklyReset = rl.weekly_usage_reset_time;
+      const fiveHourUsed = Math.max(0, (1 - fiveHourLeft) * 100);
+      const weeklyUsed = Math.max(0, (1 - weeklyLeft) * 100);
+      const fiveEl = document.getElementById('fiveHourUsage' + p);
+      const weekEl = document.getElementById('weeklyUsage' + p);
+      if (fiveEl) { fiveEl.textContent = fiveHourUsed.toFixed(1) + '%'; fiveEl.style.color = ''; }
+      if (weekEl) { weekEl.textContent = weeklyUsed.toFixed(1) + '%'; weekEl.style.color = ''; }
+      const fiveBar = document.getElementById('fiveHourBar' + p);
+      const weekBar = document.getElementById('weeklyBar' + p);
+      if (fiveBar) {
+        fiveBar.style.width = fiveHourUsed + '%';
+        fiveBar.style.background = 'rgba(255,255,255,0.6)';
+      }
+      if (weekBar) {
+        weekBar.style.width = weeklyUsed + '%';
+        weekBar.style.background = 'rgba(255,255,255,0.6)';
+      }
+      const fiveResetEl = document.getElementById('fiveHourReset' + p);
+      const weekResetEl = document.getElementById('weeklyReset' + p);
+      if (fiveHourReset && fiveResetEl) {
+        const msLeft = (parseInt(fiveHourReset) * 1000) - Date.now();
+        fiveResetEl.textContent = msLeft > 0 ? Math.floor(msLeft / 3600000) + 'h ' + Math.floor((msLeft % 3600000) / 60000) + 'm' : 'resetting...';
+      }
+      if (weeklyReset && weekResetEl) {
+        const msLeft = (parseInt(weeklyReset) * 1000) - Date.now();
+        weekResetEl.textContent = msLeft > 0 ? Math.floor(msLeft / 86400000) + 'd ' + Math.floor((msLeft % 86400000) / 3600000) + 'h' : 'resetting...';
+      }
+    }
+
+    function renderCombined() {
+      if (!document.getElementById('planSlideshow')) return;
+      const planCounts = {};
+      let totalFiveHourUsed = 0;
+      let totalWeeklyUsed = 0;
+      let count = 0;
+      for (let i = 0; i < keyPlanDataCache.length; i++) {
+        const p = '_' + (i + 1);
+        const nameEl = document.getElementById('planName' + p);
+        if (nameEl) {
+          const name = nameEl.textContent.trim();
+          if (name) planCounts[name] = (planCounts[name] || 0) + 1;
+        }
+        const d = keyPlanDataCache[i];
+        if (d && d.rate_limit) {
+          const rl = d.rate_limit;
+          totalFiveHourUsed += Math.max(0, (1 - (rl.five_hour_usage_left_rate ?? 1)) * 100);
+          totalWeeklyUsed += Math.max(0, (1 - (rl.weekly_usage_left_rate ?? 1)) * 100);
+          count++;
+        }
+      }
+      const nameEl = document.getElementById('planName');
+      const expiryEl = document.getElementById('planExpiry');
+      const planNames = Object.entries(planCounts).sort((a, b) => b[1] - a[1]);
+      if (planNames.length > 0) {
+        const displayName = planNames.map(([n, c]) => (c > 1 ? c + 'x ' : '') + n).join(', ');
+        nameEl.textContent = displayName;
+        nameEl.setAttribute('title', displayName);
+      } else {
+        nameEl.textContent = 'No Plan';
+        nameEl.removeAttribute('title');
+      }
+      if (expiryEl) {
+        expiryEl.textContent = '';
+        expiryEl.style.display = 'none';
+      }
+      if (count > 0) {
+        const avgFive = totalFiveHourUsed / count;
+        const avgWeekly = totalWeeklyUsed / count;
+        document.getElementById('fiveHourUsage').textContent = avgFive.toFixed(1) + '%';
+        document.getElementById('weeklyUsage').textContent = avgWeekly.toFixed(1) + '%';
+        const fiveBar = document.getElementById('fiveHourBar');
+        const weekBar = document.getElementById('weeklyBar');
+        fiveBar.style.width = avgFive + '%';
+        fiveBar.style.background = 'rgba(255,255,255,0.6)';
+        weekBar.style.width = avgWeekly + '%';
+        weekBar.style.background = 'rgba(255,255,255,0.6)';
+      }
+    }
+
+    function buildSlideHTML(idx) {
+      const p = '_' + idx;
+      return `<div class="row text-center align-items-stretch">
+        <div class="col-4"><div class="stats-card card h-100 d-flex flex-column" data-glass><div class="card-content flex-grow-1 justify-content-center align-items-center d-flex flex-column" style="padding:8px"><div class="stats-value" id="planName${p}" title="Loading...">Loading...</div><div class="stats-label">Plan</div><div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:4px" id="planExpiry${p}">--</div></div></div></div>
+        <div class="col-4"><div class="stats-card card h-100 d-flex flex-column" data-glass><div class="card-content flex-grow-1 justify-content-center align-items-center d-flex flex-column" style="padding:8px"><div class="stats-value" id="fiveHourUsage${p}">--</div><div class="stats-label">5h Usage</div><div style="width:80%;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;margin-top:6px"><div id="fiveHourBar${p}" style="height:100%;border-radius:3px;background:rgba(255,255,255,0.6);transition:width 0.5s;width:0%"></div></div></div></div></div>
+        <div class="col-4"><div class="stats-card card h-100 d-flex flex-column" data-glass><div class="card-content flex-grow-1 justify-content-center align-items-center d-flex flex-column" style="padding:8px"><div class="stats-value" id="weeklyUsage${p}">--</div><div class="stats-label">Weekly Usage</div><div style="width:80%;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;margin-top:6px"><div id="weeklyBar${p}" style="height:100%;border-radius:3px;background:rgba(255,255,255,0.6);transition:width 0.5s;width:0%"></div></div></div></div></div>
+      </div>`;
+    }
+
+    function goToSlide(idx) {
+      const slides = document.querySelectorAll('.plan-slide');
+      const dots = document.querySelectorAll('.plan-dot');
+      slides.forEach((s, i) => s.classList.toggle('active', i === idx));
+      dots.forEach((d, i) => { if (i >= 0) d.classList.toggle('active', i === idx); });
+      currentSlide = idx;
+      if (planSlides[idx]) {
+        document.getElementById('planLegend').textContent = planSlides[idx].keyName;
+      }
+    }
+
+    async function fetchStepPlanStatus() {
+      let realData = null;
+      try {
+        const r = await fetch('/api/step-plan-status');
+        if (r.ok) { realData = await r.json(); stepPlanData = realData; }
+      } catch (e) {}
+
+      let tokenCount = 0;
+      try {
+        const hr = await fetch('/healthz');
+        if (hr.ok) {
+          const healthData = await hr.json();
+          tokenCount = (healthData.token_state || []).length;
+        }
+      } catch (e) {}
+
+      const fieldset = document.getElementById('planFieldset');
+      const hasNoPlan = !realData || !realData.plan || realData.plan.status !== 1 || !realData.plan.subscription;
+
+      if (hasNoPlan) {
+        fieldset.innerHTML = `<div class="no-plan-card">
+          <h5>How the Free Tier Works</h5>
+          <ul>
+            <li><strong>Indefinitely Free:</strong><br>The proprietary baseline models — such as Agnes-2.0-Flash — are free to use without a time trial or credit card.</li>
+            <li><strong>Dynamic Rate Limits:</strong><br>Rather than giving you a hard monthly number (like 1 million tokens), the platform throttles requests based on real-time server load. During peak hours, your generation speeds may slow down or briefly pause to prioritize paid developer traffic.</li>
+          </ul>
+          <p class="subscribe-text">Consider subscribing to keep the service up and available for everyone if you like it.</p>
+          <a href="https://platform.agnes-ai.com/subscribe/subscription?from=website" target="_blank">View Plans &amp; Pricing</a>
+        </div>`;
+        return;
+      }
+
+      const slideshow = document.getElementById('planSlideshow');
+      const dots = document.getElementById('planDots');
+      slideshow.querySelectorAll('.plan-slide').forEach((s, i) => { if (i > 0) s.remove(); });
+      dots.innerHTML = '';
+
+      const hasMultipleKeys = tokenCount > 1;
+
+      planSlides = [
+        { keyName: hasMultipleKeys ? 'Combined' : 'Plan', data: null },
+      ];
+      keyPlanDataCache = [realData];
+
+      const combinedDot = document.createElement('span');
+      combinedDot.className = 'plan-dot active';
+      combinedDot.style.cssText = 'width:10px;height:10px;border-radius:2px;background:rgba(255,255,255,0.8);cursor:pointer;transition:background 0.3s';
+      combinedDot.onclick = () => goToSlide(0);
+      dots.appendChild(combinedDot);
+
+      if (hasMultipleKeys && realData) {
+        planSlides.push({ keyName: 'Real', data: realData });
+        keyPlanDataCache.push(realData);
+
+        const slide = document.createElement('div');
+        slide.className = 'plan-slide';
+        slide.innerHTML = buildSlideHTML(1);
+        slideshow.appendChild(slide);
+        const dot = document.createElement('span');
+        dot.className = 'plan-dot';
+        dot.style.cssText = 'width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.3);cursor:pointer;transition:background 0.3s';
+        dot.onclick = () => goToSlide(1);
+        dots.appendChild(dot);
+        renderPlanInto(realData, '_1');
+      }
+
+      renderCombined();
+      currentSlide = 0;
+    }
+
+    function toggleSection(name) {
+      const body = document.getElementById('section-' + name);
+      const card = body.closest('[data-section]');
+      const icon = card.querySelector('.toggle-icon');
+      body.classList.toggle('collapsed');
+      icon.classList.toggle('collapsed');
+      setTimeout(() => initLiquidGlass(), 50);
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    Promise.all([
+      loadConfiguration().then(() => fetchBingWallpaper()),
+      checkHealth(),
+      fetchStepPlanStatus(),
+    ]).then(() => {
+      initLiquidGlass();
+      setTimeout(() => window.dispatchEvent(new Event('resize')), 1000);
+      setTimeout(() => window.dispatchEvent(new Event('resize')), 3000);
+    });
+    setInterval(() => checkHealth(true), 15000);
+    setInterval(() => fetchStepPlanStatus(), 30000);
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(initLiquidGlass, 150);
+    });
+  </script>
+</body>
+</html>
