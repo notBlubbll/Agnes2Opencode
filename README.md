@@ -33,6 +33,16 @@ OpenAI-compatible proxy server for [Agnes AI](https://agnes-ai.com), providing a
 
 Models are dynamically fetched from `https://agnes-ai.com/api/v1/models` on startup.
 
+## How the Free Tier Works
+
+- **Indefinitely Free:**
+  The proprietary baseline models — such as Agnes-2.0-Flash — are free to use without a time trial or credit card.
+
+- **Dynamic Rate Limits:**
+  Rather than giving you a hard monthly number (like 1 million tokens), the platform throttles requests based on real-time server load. During peak hours, your generation speeds may slow down or briefly pause to prioritize paid developer traffic.
+
+Consider subscribing to keep the service up and available for everyone if you like it. [View Plans & Pricing](https://platform.agnes-ai.com/subscribe/subscription?from=website)
+
 ## Quick Start
 
 ```bash
