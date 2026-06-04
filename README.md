@@ -24,7 +24,10 @@ Also a techdemo that demonstrates interaction with the api, including authed api
 - **Model Remapping** — Transparently translates legacy model IDs (`sapiens-ai/agnes-1.5-pro` → `agnes-2.0-flash`)
 - **Response Caching** — LRU cache for non-streaming responses (configurable TTL and max size)
 - **Multi-Key Support** — Rotate between multiple Agnes AI API keys with fingerprint-based sticky sessions
-- **AI Wallpaper** — Generate AI backgrounds via `agnes-image-2.1-flash` using any API token, auto-enabled when a key is saved
+- **AI Wallpaper** — Generate AI image or video backgrounds via Agnes AI models, auto-enabled when a key is saved
+- **AI Video Wallpaper** — Generate looping muted videos via `agnes-video-v2.0` with real-time SSE progress on the dashboard
+- **Wallpaper Progress (SSE)** — Live `generating...` / `(X%)` indicators on wallpaper mode buttons via Server-Sent Events
+- **Favicon from Video** — Extracts first video frame to canvas for circular favicon when using video wallpaper
 - **Plan Status** — View subscription status, usage windows, and billing info from the dashboard
 - **Retry Logic** — Automatic retry with exponential backoff for transient errors (model unavailable, query engine)
 - **Test Mode** — Mock responses for development without consuming API credits
@@ -107,8 +110,9 @@ Edit `.config/config.json` or set environment variables:
 | `CACHE_TTL` | Response cache TTL | `60s` |
 | `CACHE_MAX_SIZE` | Max cached responses | `100` |
 | `CACHE_ENABLED` | Enable response caching | `true` |
-| `WALLPAPER_MODE` | Wallpaper source: `none`, `bing`, or `ai` | `bing` |
-| `WALLPAPER_PROMPT` | Prompt for AI wallpaper generation | `realistic vibrant colorful mountain range landscape` |
+| `WALLPAPER_MODE` | Wallpaper source: `none`, `bing`, `ai`, or `ai-video` | `bing` |
+| `IMG_PROMPT` | Prompt for AI image wallpaper generation | `realistic vibrant colorful mountain range landscape` |
+| `VIDEO_PROMPT` | Prompt for AI video wallpaper generation | `cinematic slow motion of a vibrant colorful mountain range landscape with drifting clouds, 5 seconds` |
 | `TEST_MODE` | Return mock responses without calling upstream | `false` |
 | `LOCAL_OVERWRITE` | Force a single dashboard locale (e.g. `de`, `fr`, `ja`). When set, the autotranslate toggle is locked ON and the browser locale is ignored. Also forces `de` when `TEST_MODE=true`. | `null` |
 
@@ -207,7 +211,7 @@ Access at `http://localhost:8080`:
 - **Platform Login** — Login with Agnes AI account, add multiple accounts, view account info, logout
 - **Retrieve Keys from Platform** — Fetch API keys from logged-in platform account, select and apply with auto-fill
 - **Apply API Key Modal** — Post-login modal that fetches platform keys, shows previews, fetches full key on selection
-- **Wallpaper Toggle** — Switch between None, Bing, and AI Image modes with configurable prompt (auto-enables AI on key save)
+- **Wallpaper Toggle** — Switch between None, Bing, AI Image, and AI Video modes with separate configurable prompts; AI Image shows `generating...` on the button, AI Video shows `(X%)` progress — all via SSE in real time
 - **Collapsible Sections** — Models, API Key, Quick Actions, Environment, Proxy Configuration
 - **Auto-refresh** — Health check every 15s, plan status every 30s
 - **Autotranslate (beta)** — Bottom-left checkbox that translates every UI string via Agnes AI. When `TEST_MODE` is on or `LOCAL_OVERWRITE` is set in config, the toggle is forced ON and locked.
@@ -250,8 +254,10 @@ The proxy prefetches translations on startup whenever a forced locale is in effe
 | `GET` / `POST` | `/api/config` | Read/write proxy configuration |
 | `GET` | `/api/validate` | Validate API key against upstream |
 | `GET` | `/api/models` | List available model IDs with metadata |
-| `GET` | `/api/bg` | Wallpaper image (Bing daily, AI-generated, or 204 none) |
-| `POST` | `/api/generate-image` | Generate AI wallpaper, save to `.cache/ai-paper.jpg` |
+| `GET` | `/api/bg` | Wallpaper image or video (Bing daily, AI-generated, AI video, or 204 none) |
+| `POST` | `/api/generate-image` | Generate AI image wallpaper, save to `.cache/ai-paper.jpg` |
+| `POST` | `/api/generate-video` | Generate AI video wallpaper, save to `.cache/ai-video.mp4` |
+| `GET` | `/api/wallpaper-progress` | SSE stream of wallpaper generation progress; JSON snapshot without `Accept: text/event-stream` |
 | `GET` / `POST` | `/api/keys` | Multi-key CRUD (add/update/delete, includes `platformUsername`) |
 | `GET` | `/api/account` | Platform user data (`{ logged_in, user }`) |
 | `GET` | `/api/plan-status` | Subscription plan status with usage windows |

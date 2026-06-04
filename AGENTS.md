@@ -26,9 +26,15 @@ AGNES-PROXY/
 - `PLATFORM_BASE_URL` — `https://platform-backend.agnes-ai.com`
 - `API_KEY_ENV_VAR` — `AGNES_API_KEY`
 - `AGNES_USER_AGENT` — `Agnes2Opencode` (sent as `User-Agent` on every outbound call to Agnes endpoints — chat completions, `/v1/models`, platform login/user/keys/subscription, AI image generation)
-- `loadConfig()` — Loads `.config/config.json` with env var overrides; normalizes `TOKENS` array with per-token fields (`name`, `token`, `email`, `platformUsername`, `platformPassword`, `platformToken`, `platformUser`)
+- `loadConfig()` — Loads `.config/config.json` with env var overrides; normalizes `TOKENS` array with per-token fields (`name`, `token`, `email`, `platformUsername`, `platformPassword`, `platformToken`, `platformUser`); provides separate `img_prompt` and `video_prompt` fields (env vars `IMG_PROMPT` / `VIDEO_PROMPT`; falls back to `WALLPAPER_PROMPT`)
 - `saveConfig()` — Writes config back to `.config/config.json` (serializes `TOKENS`, `ENABLED_MODELS`, cache settings, etc.)
-- `generateAiWallpaperToDisk()` — Generates AI image via `/v1/images/generations` with model `agnes-image-2.1-flash`, saves to `.cache/ai-paper.jpg` (supports both URL-based and base64-encoded responses). Uses the first available token's API key (no subscription check — works with all plans including free). Disabled when no token is configured.
+- `generateAiWallpaperToDisk()` — Generates AI image via `/v1/images/generations` with model `agnes-image-2.1-flash`, saves to `.cache/ai-paper.jpg` (supports both URL-based and base64-encoded responses). Uses the first available token's API key. Disabled when no token is configured.
+- `generateAiVideoToDisk()` — Generates AI video via `/v1/videos` with model `agnes-video-v2.0`, polls for completion every 12s (no fixed timeout — polls indefinitely as long as progress is > 0), downloads result to `.cache/ai-video.mp4`. Logs only on progress change to avoid console spam. Extracts video URL from `remixed_from_video_id` field.
+- `checkVideoGenFeature()` — Fetches subscription from platform API to check `features.video_gen` flag; returns `true`/`false`/`null` (null = can't reach API, proceeds anyway)
+- `_genProgress` — Module-level state: `{ kind: 'image'|'video'|null, progress: 0-100 }` — updated by `setGenProgress()` which also broadcasts to SSE clients
+- `setGenProgress(kind, progress)` — Sets `_genProgress` and calls `broadcastProgress()`
+- `broadcastProgress()` — Writes JSON to all connected SSE clients in `_sseClients`; silently removes dead clients on write failure
+- `_sseClients` — Array of active SSE response objects
 - `hasApiToken()` — Returns `true` if any token in config has a non-empty `token` field (used as gate for wallpaper generation)
 - `parseDuration()` — Parses duration strings like `15m`, `6h`, `30s`
 

@@ -64,15 +64,15 @@
       position: fixed;
       inset: 0;
       z-index: 100000;
-      background: rgba(0,0,0,0.88);
+      background: rgba(0,0,0,0.25);
       display: none;
       align-items: center;
       justify-content: center;
       flex-direction: column;
       gap: 16px;
       color: white;
-      backdrop-filter: blur(4px);
-      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
     .translate-overlay.show {
       display: flex;
@@ -195,6 +195,10 @@
       justify-content: center;
       text-decoration: none !important;
       transition: all 0.15s ease;
+    }
+    #section-actions .btn-outline-action {
+      justify-content: flex-start;
+      text-align: left;
     }
     .btn-outline-action:hover, .btn-outline-action:focus {
       background: rgba(255, 255, 255, 0.15);
@@ -1020,6 +1024,8 @@
                   <label class="btn btn-outline-action" for="wp-bing" data-i18n="wp_bing">Bing</label>
                   <input type="radio" class="btn-check" name="wallpaper" id="wp-ai" value="ai" autocomplete="off">
                   <label class="btn btn-outline-action" for="wp-ai" data-i18n="wp_ai">AI Image</label>
+                  <input type="radio" class="btn-check" name="wallpaper" id="wp-ai-video" value="ai-video" autocomplete="off">
+                  <label class="btn btn-outline-action" for="wp-ai-video" data-i18n="wp_video">AI Video</label>
                 </div>
               </div>
               <div class="mb-2" id="aiPromptContainer" style="display:none">
@@ -1112,7 +1118,7 @@
         </div>
         <div class="modal-body">
           <div class="mb-3">
-            <label class="form-label" style="font-size:12px" data-i18n="label_username">Username (email)</label>
+            <label class="form-label" style="font-size:12px" data-i18n="label_username">E-Mail / username</label>
             <input type="text" class="form-control form-control-sm" id="platLoginUsername" placeholder="email@example.com" data-i18n-placeholder="username_placeholder">
           </div>
           <div class="mb-3">
@@ -1656,6 +1662,8 @@
     function updateAiWallpaperButton() {
       const aiRadio = document.getElementById('wp-ai');
       const aiLabel = document.querySelector('label[for="wp-ai"]');
+      const vidRadio = document.getElementById('wp-ai-video');
+      const vidLabel = document.querySelector('label[for="wp-ai-video"]');
       if (!aiRadio) return;
       aiRadio.disabled = !hasImageGen;
       if (aiLabel) {
@@ -1664,9 +1672,19 @@
         aiLabel.style.pointerEvents = 'auto';
         aiLabel.title = hasImageGen ? '' : 'Requires an API key';
       }
+      if (vidRadio) {
+        vidRadio.disabled = !hasImageGen;
+        if (vidLabel) {
+          vidLabel.style.opacity = hasImageGen ? '1' : '0.4';
+          vidLabel.style.cursor = hasImageGen ? '' : 'not-allowed';
+          vidLabel.style.pointerEvents = 'auto';
+          vidLabel.title = hasImageGen ? '' : 'Requires an API key';
+        }
+      }
       const currentMode = document.querySelector('input[name="wallpaper"]:checked')?.value;
-      if (currentMode === 'ai' && !hasImageGen) {
+      if ((currentMode === 'ai' || currentMode === 'ai-video') && !hasImageGen) {
         aiRadio.checked = false;
+        if (vidRadio) vidRadio.checked = false;
         const bingRadio = document.getElementById('wp-bing');
         if (bingRadio) bingRadio.checked = true;
         applyWallpaper('bing');
@@ -1682,15 +1700,49 @@
     function applyWallpaper(source) {
       const radio = document.querySelector('.btn-check[name="wallpaper"][value="' + source + '"]');
       if (radio) radio.checked = true;
-      document.getElementById('aiPromptContainer').style.display = source === 'ai' ? 'block' : 'none';
-      if (source === _embeddedWpMode) { _embeddedWpMode = ''; return; }
+      document.getElementById('aiPromptContainer').style.display = (source === 'ai' || source === 'ai-video') ? 'block' : 'none';
+      if (source === _embeddedWpMode) { _embeddedWpMode = ''; updateFaviconFromBackground(source); return; }
       _embeddedWpMode = '';
+      removeVideoBg();
       if (source === 'none') {
         document.body.style.background = '#0d1117';
+      } else if (source === 'ai-video') {
+        document.body.style.background = '#0d1117';
+        loadVideoBg();
       } else {
         document.body.style.background = 'url("/api/bg?t=' + Date.now() + '") center/cover no-repeat fixed';
       }
       updateFaviconFromBackground(source);
+    }
+
+    function removeVideoBg() {
+      const old = document.getElementById('wp-video-bg');
+      if (old) old.remove();
+      const oldFb = document.getElementById('wp-video-fallback');
+      if (oldFb) oldFb.remove();
+    }
+
+    function loadVideoBg() {
+      removeVideoBg();
+      const fallback = document.createElement('div');
+      fallback.id = 'wp-video-fallback';
+      fallback.style.cssText = 'position:fixed;inset:0;background:#0d1117;z-index:-3;pointer-events:none';
+      document.body.appendChild(fallback);
+      const url = '/api/bg?t=' + Date.now();
+      const v = document.createElement('video');
+      v.id = 'wp-video-bg';
+      v.autoplay = true;
+      v.loop = true;
+      v.muted = true;
+      v.playsInline = true;
+      v.preload = 'auto';
+      v.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;z-index:-2;pointer-events:none;background:#0d1117;opacity:0;transition:opacity .4s ease';
+      v.src = url;
+      v.addEventListener('loadeddata', () => { v.style.opacity = '1'; }, { once: true });
+      v.addEventListener('error', () => { /* keep fallback dark */ }, { once: true });
+      document.body.appendChild(v);
+      const playPromise = v.play();
+      if (playPromise && typeof playPromise.catch === 'function') playPromise.catch(() => {});
     }
 
     const FAVICON_SIZE = 64;
@@ -1756,6 +1808,29 @@
 
     async function updateFaviconFromBackground(source) {
       try {
+        if (source === 'ai-video') {
+          const vid = document.getElementById('wp-video-bg');
+          if (vid && vid.readyState >= 2) {
+            const canvas = document.createElement('canvas');
+            canvas.width = FAVICON_SIZE;
+            canvas.height = FAVICON_SIZE;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(vid, 0, 0, FAVICON_SIZE, FAVICON_SIZE);
+            setFaviconHref(makeCircularFaviconDataUrl(canvas));
+          } else if (vid) {
+            vid.addEventListener('loadeddata', () => {
+              const canvas = document.createElement('canvas');
+              canvas.width = FAVICON_SIZE;
+              canvas.height = FAVICON_SIZE;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(vid, 0, 0, FAVICON_SIZE, FAVICON_SIZE);
+              setFaviconHref(makeCircularFaviconDataUrl(canvas));
+            }, { once: true });
+          } else {
+            setFaviconHref(makeSolidCircleFaviconDataUrl('#0d1117'));
+          }
+          return;
+        }
         if (source === 'none') {
           setFaviconHref(makeSolidCircleFaviconDataUrl('#0d1117'));
           return;
@@ -1780,8 +1855,13 @@
           if (document.getElementById('requestTimeout')) document.getElementById('requestTimeout').value = configData.requestTimeout || '15m';
           const mode = configData.wallpaperMode || 'bing';
           applyWallpaper(mode);
-          if (document.getElementById('aiPromptInput') && configData.wallpaperPrompt) {
-            document.getElementById('aiPromptInput').value = configData.wallpaperPrompt;
+          if (mode === 'ai') { startProgressPoll(false); fetch('/api/generate-image', { method: 'POST' }).catch(() => {}); }
+          if (mode === 'ai-video') { startProgressPoll(false); fetch('/api/generate-video', { method: 'POST' }).catch(() => {}); }
+          if (document.getElementById('aiPromptInput')) {
+            const defMode = configData.wallpaperMode || 'bing';
+            const val = defMode === 'ai-video' ? configData.video_prompt : configData.img_prompt;
+            document.getElementById('aiPromptInput').value = val || '';
+            document.getElementById('aiPromptInput').placeholder = defMode === 'ai-video' ? (t('wp_video_placeholder', 'Video prompt...')) : (t('wp_ai_placeholder', 'Image prompt...'));
           }
         }
         const modelsResponse = await fetch('/api/models');
@@ -2286,7 +2366,7 @@
             <label class="form-label" style="font-size:12px">${escapeHtml(lblValue)}</label>
             <input type="text" class="form-control form-control-sm" id="applyKeyValue" value="" readonly placeholder="${escapeHtml(lblFetching)}" data-last-idx="0">
           </div>
-          <small class="text-muted d-block mb-1" style="font-size:10px">${escapeHtml(lblSavedAs.replace('{name}', '<span id="applyKeyPreview" style="color:rgba(255,255,255,0.8)">' + escapeHtml(sanitizeKeyName(firstKey.plan_name || t('default_name', 'Default'), data.username || _applyKeyUsername)) + '</span>'))}</small>
+          <small class="text-muted d-block mb-1" style="font-size:10px">${lblSavedAs.replace('{name}', '<span id="applyKeyPreview" style="color:rgba(255,255,255,0.8)">' + escapeHtml(sanitizeKeyName(firstKey.plan_name || t('default_name', 'Default'), data.username || _applyKeyUsername)) + '</span>')}</small>
           <small class="d-block mb-1" style="font-size:10px;color:rgba(255,255,255,0.5)" id="applyKeyHint">${escapeHtml(lblFetching)}</small>
         `;
         confirmBtn.disabled = false;
@@ -2312,11 +2392,18 @@
       const confirmBtn = document.getElementById('applyKeyConfirmBtn');
       const proposed = sanitizeKeyName(key.plan_name || t('default_name', 'Default'), _applyKeyUsername);
       preview.textContent = proposed;
-      hint.textContent = t('apply_key_fetching', 'Fetching full key...');
-      hint.style.color = 'rgba(255,255,255,0.5)';
       valueInput.value = '';
       confirmBtn.disabled = true;
       valueInput.dataset.lastIdx = String(idx);
+      if (key._revealed && key.full_key) {
+        valueInput.value = key.full_key;
+        hint.textContent = t('apply_key_loaded', 'Key loaded.');
+        hint.style.color = '#28a745';
+        confirmBtn.disabled = false;
+        return;
+      }
+      hint.textContent = t('apply_key_fetching', 'Fetching full key...');
+      hint.style.color = 'rgba(255,255,255,0.5)';
       try {
         const r = await fetch('/api/platform/token/' + encodeURIComponent(key.id) + '/key');
         const d = await r.json();
@@ -2380,7 +2467,7 @@
             fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallpaperMode: 'ai' }) }).catch(() => {});
             const wpAi = document.getElementById('wp-ai');
             if (wpAi) wpAi.checked = true;
-            loadConfiguration().then(() => { hideAllModals(); checkHealth(true); openKeysModal(); });
+            loadConfiguration().then(() => { hideAllModals(); checkHealth(true); fetchPlanStatus(); openKeysModal(); });
             return;
           }
         }
@@ -2392,7 +2479,7 @@
           fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallpaperMode: 'ai' }) }).catch(() => {});
           const wpAi = document.getElementById('wp-ai');
           if (wpAi) wpAi.checked = true;
-          loadConfiguration().then(() => { hideAllModals(); checkHealth(true); openKeysModal(); });
+          loadConfiguration().then(() => { hideAllModals(); checkHealth(true); fetchPlanStatus(); openKeysModal(); });
         } else {
           const failTpl = t('toast_failed_prefix', 'Failed:');
           const unk = t('unknown_error', 'unknown');
@@ -2814,7 +2901,7 @@
         // No plan — populate the top 3-column black category card with "Free Access",
         // and show the detailed no-plan info as an additional black card below.
         const loggedIn = realData?.logged_in;
-        const statusLine = loggedIn ? t('plan_free_access', 'Free Access') : t('plan_no_key', 'No key configured');
+        const statusLine = hasAnyKeys || loggedIn ? t('plan_free_access', 'Free Access') : t('plan_no_key', 'No key configured');
         const planNameEl = document.getElementById('planName');
         const planExpiryEl = document.getElementById('planExpiry');
         const planLegendEl = document.getElementById('planLegend');
@@ -2887,10 +2974,50 @@
       return div.innerHTML;
     }
 
+    let _progressSSE = null;
+    function updateGenButtonLabel(kind, progress) {
+      const label = document.querySelector(kind === 'video' ? 'label[for="wp-ai-video"]' : 'label[for="wp-ai"]');
+      if (!label) return;
+      let span = label.querySelector('.gen-progress');
+      if (!span) { span = document.createElement('span'); span.className = 'gen-progress'; label.appendChild(span); }
+      if (kind === 'image' && progress >= 0 && progress < 100) {
+        span.textContent = ' generating...';
+      } else if (kind === 'video' && progress >= 0 && progress < 100) {
+        span.textContent = ' (' + Math.min(progress, 99) + '%)';
+      } else {
+        span.textContent = '';
+      }
+    }
+    function startProgressPoll(optimistic) {
+      if (_progressSSE) { _progressSSE.close(); _progressSSE = null; }
+      document.querySelectorAll('.gen-progress').forEach(s => s.textContent = '');
+      const mode = document.querySelector('input[name="wallpaper"]:checked')?.value;
+      if (optimistic !== false) {
+        if (mode === 'ai') updateGenButtonLabel('image', 0);
+        if (mode === 'ai-video') updateGenButtonLabel('video', 0);
+      }
+      _progressSSE = new EventSource('/api/wallpaper-progress?_=' + Date.now());
+      _progressSSE.onmessage = function(e) {
+        try {
+          const d = JSON.parse(e.data);
+          const mode = document.querySelector('input[name="wallpaper"]:checked')?.value;
+          if (!d.kind) return;
+          updateGenButtonLabel(d.kind, d.progress);
+          if (d.progress >= 100 && ((d.kind === 'image' && mode === 'ai') || (d.kind === 'video' && mode === 'ai-video'))) {
+            _progressSSE.close();
+            _progressSSE = null;
+            if (d.kind === 'video' && mode === 'ai-video') { removeVideoBg(); loadVideoBg(); }
+            if (d.kind === 'image' && mode === 'ai') { document.body.style.background = 'url("/api/bg?t=' + Date.now() + '") center/cover no-repeat fixed'; updateFaviconFromBackground('ai'); }
+          }
+        } catch (e) { console.warn('[SSE] parse error:', e.message, e.data); }
+      };
+      _progressSSE.onerror = function() { console.warn('[SSE] connection error, readyState:', _progressSSE.readyState); };
+    }
+
     document.getElementById('wallpaperGroup')?.addEventListener('change', async function(e) {
       if (!e.target.matches('.btn-check')) return;
       const mode = e.target.value;
-      if (mode === 'ai' && !hasImageGen) {
+      if ((mode === 'ai' || mode === 'ai-video') && !hasImageGen) {
         e.target.checked = false;
         const bingRadio = document.getElementById('wp-bing');
         if (bingRadio) bingRadio.checked = true;
@@ -2905,18 +3032,34 @@
         });
       } catch (e) {}
       applyWallpaper(mode);
+      const input = document.getElementById('aiPromptInput');
+      if (input) {
+        input.placeholder = mode === 'ai-video' ? (t('wp_video_placeholder', 'Video prompt...')) : (t('wp_ai_placeholder', 'Image prompt...'));
+        const val = mode === 'ai-video' ? (config.video_prompt || '') : (config.img_prompt || '');
+        input.value = val;
+      }
+      if (mode === 'ai-video') {
+        fetch('/api/generate-video', { method: 'POST' }).catch(() => {});
+      }
+      startProgressPoll();
     });
 
     document.getElementById('aiPromptInput')?.addEventListener('change', async function() {
       const mode = document.querySelector('input[name="wallpaper"]:checked')?.value;
-      if (mode !== 'ai' || !hasImageGen) return;
+      if ((mode !== 'ai' && mode !== 'ai-video') || !hasImageGen) return;
+      const field = mode === 'ai-video' ? 'video_prompt' : 'img_prompt';
       try {
         await fetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ wallpaperPrompt: this.value }),
+          body: JSON.stringify({ [field]: this.value }),
         });
-        fetch('/api/generate-image', { method: 'POST' });
+        if (mode === 'ai-video') {
+          fetch('/api/generate-video', { method: 'POST' }).catch(() => {});
+        } else {
+          fetch('/api/generate-image', { method: 'POST' });
+        }
+        startProgressPoll();
       } catch (e) {}
     });
 

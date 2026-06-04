@@ -186,7 +186,8 @@ function loadConfig() {
     testMode: rawConfig.TEST_MODE !== false,
     localOverwrite: typeof rawConfig.LOCAL_OVERWRITE === 'string' && rawConfig.LOCAL_OVERWRITE.trim() ? rawConfig.LOCAL_OVERWRITE.trim().toLowerCase().split(/[-_]/)[0].slice(0, 8) : null,
     wallpaperMode: rawConfig.WALLPAPER_MODE || 'bing',
-    wallpaperPrompt: rawConfig.WALLPAPER_PROMPT || 'realistic vibrant colorful mountain range landscape',
+    img_prompt: rawConfig.IMG_PROMPT || rawConfig.WALLPAPER_PROMPT || 'realistic vibrant colorful mountain range landscape',
+    video_prompt: rawConfig.VIDEO_PROMPT || rawConfig.WALLPAPER_PROMPT || 'cinematic slow motion of a vibrant colorful mountain range landscape with drifting clouds, 5 seconds',
   };
 }
 
@@ -224,7 +225,8 @@ function saveConfig(cfg) {
     PLATFORM_USERS: platformUsers,
     ENABLED_MODELS: cfg.enabledModels,
     WALLPAPER_MODE: cfg.wallpaperMode || 'bing',
-    WALLPAPER_PROMPT: cfg.wallpaperPrompt || 'realistic vibrant colorful mountain range landscape',
+    IMG_PROMPT: cfg.img_prompt || 'realistic vibrant colorful mountain range landscape',
+    VIDEO_PROMPT: cfg.video_prompt || 'cinematic slow motion of a vibrant colorful mountain range landscape with drifting clouds, 5 seconds',
     CACHE_TTL: `${(cfg.cacheTtl || 60000) / 1000}s`,
     CACHE_MAX_SIZE: cfg.cacheMaxSize || 100,
     CACHE_ENABLED: cfg.cacheEnabled !== false,
@@ -304,6 +306,7 @@ const I18N_STRINGS = {
   wp_none: 'None',
   wp_bing: 'Bing',
   wp_ai: 'AI Image',
+  wp_video: 'AI Video',
   wp_ai_prompt: 'AI Prompt',
   wp_ai_placeholder: 'Image prompt...',
   env_ss_mode: 'SS Mode',
@@ -451,6 +454,7 @@ const I18N_STRINGS = {
   key_status_active: 'Active',
   key_status_inactive: 'Inactive',
   key_status_none: 'None',
+  key_status_unknown: 'Unknown',
   key_status_checking: 'Checking…',
   connection_failed: 'Connection failed',
 };
@@ -912,21 +916,27 @@ async function platformGetUserKeys() {
 
 async function platformGetTokenKey(tokenId) {
   if (!platformSession.token) return null;
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
-    const resp = await fetch(`${PLATFORM_BASE_URL}/api/token/${tokenId}/key`, {
-      method: 'POST',
-      headers: { ...getPlatformHeaders(), 'Content-Type': 'application/json' },
-      body: null,
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!resp.ok) return null;
-    const body = await resp.json();
-    if (body.code !== 200 || !body.data?.key) return null;
-    return body.data.key;
-  } catch (e) { return null; }
+  // Try regular endpoint first, then fall back to premium reveal endpoint
+  for (const url of [
+    `${PLATFORM_BASE_URL}/api/token/${tokenId}/key`,
+    `${PLATFORM_BASE_URL}/api/user/subscription/key/reveal`,
+  ]) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { ...getPlatformHeaders(), 'Content-Type': 'application/json' },
+        body: null,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!resp.ok) continue;
+      const body = await resp.json();
+      if (body.code === 200 && body.data?.key) return body.data.key;
+    } catch (e) { /* try next */ }
+  }
+  return null;
 }
 
 async function platformGetSubscriptionPlanName() {
@@ -1476,8 +1486,159 @@ async function handleChatCompletions(req, res) {
   await proxyChatRequest(res, payload, requestedModel);
 }
 
+function isImageOrVideoModel(modelId) {
+  return /image|video/i.test(modelId || '');
+}
+
+function calcNumFrames(durationSeconds, frameRate = 24) {
+  const target = Math.round(durationSeconds * frameRate);
+  const n = Math.max(1, Math.round((target - 1) / 8));
+  return Math.min(8 * n + 1, 441);
+}
+
+function extractImageUrls(msg) {
+  if (!msg) return [];
+  if (Array.isArray(msg.content)) {
+    return msg.content
+      .filter(p => p?.type === 'image_url' && p?.image_url?.url)
+      .map(p => p.image_url.url);
+  }
+  return [];
+}
+
+async function proxyImageRequest(res, payload, requestedModel) {
+  if (!config.apiKey) { writeOpenAIError(res, 503, 'no Agnes AI API key configured', 'server_error', 'no_api_key'); return; }
+  const msgs = payload.messages || [];
+  const lastUser = [...msgs].reverse().find(m => m.role === 'user');
+  const prompt = typeof lastUser?.content === 'string'
+    ? lastUser.content.replace(/^\[[^\]]+\]\s*/, '')
+    : (Array.isArray(lastUser?.content) ? (lastUser.content.find(p => p?.type === 'text')?.text || '') : '');
+  const imageUrls = extractImageUrls(lastUser);
+  const isVideo = /video/i.test(requestedModel);
+  const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  console.log(`${ts} [${isVideo ? 'Video' : 'Image'}]-[${requestedModel}]-${JSON.stringify(prompt.substring(0, 80))}`);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.requestTimeout);
+  try {
+    const endpoint = isVideo
+      ? `${config.upstreamBaseURL}/v1/videos`
+      : `${config.upstreamBaseURL}/v1/images/generations`;
+    const imageModel = /image/i.test(requestedModel)
+      ? (imageUrls.length > 1 ? 'agnes-image-2.0-flash' : 'agnes-image-2.1-flash')
+      : requestedModel;
+    const durationMatch = prompt.match(/(\d+(?:\.\d+)?)\s*(?:seconds?|secs?|s)\b/i);
+    const videoDuration = durationMatch ? parseFloat(durationMatch[1]) : 5;
+    const frameRate = 24;
+    const numFrames = calcNumFrames(videoDuration, frameRate);
+    let reqBody;
+    if (isVideo) {
+      reqBody = { model: requestedModel, prompt, width: 1280, height: 768, num_frames: numFrames, frame_rate: frameRate };
+      if (imageUrls.length === 1) {
+        reqBody.image = imageUrls[0];
+      } else if (imageUrls.length > 1) {
+        reqBody.extra_body = { image: imageUrls };
+      }
+    } else {
+      reqBody = { model: imageModel, prompt, n: 1, size: '1024x1024' };
+      if (imageUrls.length > 0) {
+        reqBody.extra_body = { image: imageUrls, response_format: 'url' };
+      }
+    }
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': AGNES_USER_AGENT,
+      },
+      body: JSON.stringify(reqBody),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!resp.ok) { const errText = await resp.text(); writePassthroughError(res, resp.status, errText); return; }
+    const data = await resp.json();
+
+    let content = 'Generation completed but no output returned.';
+
+    if (isVideo) {
+      const taskId = data.task_id || data.id;
+      if (taskId) {
+        console.log(`[Video] Task ${taskId} queued (~${(numFrames / frameRate).toFixed(1)}s video), polling...`);
+        const pollInterval = 12000;
+        let queuedSince = 0;
+        let lastProgress = -1;
+        let lastLoggedPct = -1;
+        let videoUrl = null;
+        while (true) {
+          await new Promise(r => setTimeout(r, pollInterval));
+          try {
+            const pollResp = await fetch(`${config.upstreamBaseURL}/v1/videos/${taskId}`, {
+              headers: { 'Authorization': `Bearer ${config.apiKey}`, 'User-Agent': AGNES_USER_AGENT },
+              signal: AbortSignal.timeout(30000),
+            });
+            if (!pollResp.ok) continue;
+            const pollData = await pollResp.json();
+            const s = pollData.status || 'unknown';
+            const p = typeof pollData.progress === 'number' ? pollData.progress : -1;
+            if (p !== lastLoggedPct) { console.log(`[Video] Status: ${s} progress: ${p === -1 ? '?' : p}`); lastLoggedPct = p; }
+            if (p !== lastProgress && p >= 0) { lastProgress = p; }
+            if (s === 'completed' || s === 'succeeded') {
+              videoUrl = pollData.video_url || pollData.remixed_from_video_id || pollData.url || pollData.output?.url || pollData.result?.url || pollData.download_url || pollData.public_url || pollData.uri || pollData.output?.video_url || pollData.result?.video_url || (Array.isArray(pollData.files) && pollData.files[0]?.url) || (Array.isArray(pollData.data) && pollData.data[0]?.url);
+              break;
+            }
+            if (s === 'failed' || s === 'error') {
+              content = `Video generation failed: ${pollData.error || pollData.message || 'unknown error'}`;
+              break;
+            }
+            if (s === 'queued') {
+              if (queuedSince === 0) queuedSince = Date.now();
+              else if (Date.now() - queuedSince > 30000) {
+                content = `Video stuck in queue — likely requires a paid plan (video_gen feature). Task ID: ${taskId}`;
+                break;
+              }
+            } else {
+              queuedSince = 0;
+            }
+          } catch (e) { /* retry */ }
+        }
+        if (videoUrl) content = `Video generated successfully!\n\nOpen this URL in your browser:\n${videoUrl}`;
+        else if (content === 'Generation completed but no output returned.') content = `Video timed out. Task ID: ${taskId}`;
+      }
+    } else {
+      const item = data.data?.[0];
+      if (item?.url) content = `Image generated successfully!\n\nOpen this URL in your browser:\n${item.url}`;
+      else if (item?.b64_json) content = `![Generated image](data:image/jpeg;base64,${item.b64_json})`;
+    }
+
+    const id = 'imgcmpl-' + Date.now();
+    const created = Math.floor(Date.now() / 1000);
+    if (payload.stream) {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+      res.write(`data: ${JSON.stringify({ id, object: 'chat.completion.chunk', created, model: requestedModel, choices: [{ index: 0, delta: { role: 'assistant', content: '' }, finish_reason: null }] })}\n\n`);
+      res.write(`data: ${JSON.stringify({ id, object: 'chat.completion.chunk', created, model: requestedModel, choices: [{ index: 0, delta: { content }, finish_reason: null }] })}\n\n`);
+      res.write(`data: ${JSON.stringify({ id, object: 'chat.completion.chunk', created, model: requestedModel, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } else {
+      writeJSON(res, 200, { id, object: 'chat.completion', created, model: requestedModel, choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+    }
+    console.log(`${ts} [${isVideo ? 'Video' : 'Image'}]-[${requestedModel}]-done`);
+  } catch (e) {
+    clearTimeout(timer);
+    writeOpenAIError(res, 502, e.message, 'server_error', '');
+  }
+}
+
 async function proxyChatRequest(res, payload, requestedModel) {
   const reqStart = Date.now();
+
+  if (isImageOrVideoModel(requestedModel)) {
+    detectSessionSignal(payload);
+    await proxyImageRequest(res, payload, requestedModel);
+    return;
+  }
 
   const session = detectSessionSignal(payload);
 
@@ -1648,6 +1809,16 @@ async function validateApiKey() {
 }
 
 // --- AI Wallpaper Generation ---
+let _genProgress = { kind: null, progress: 0 };
+let _sseClients = [];
+function broadcastProgress() {
+  const data = JSON.stringify(_genProgress);
+  if (_sseClients.length > 0) console.log('[SSE] broadcasting', data, 'to', _sseClients.length, 'clients');
+  _sseClients = _sseClients.filter(c => {
+    try { c.write(`data: ${data}\n\n`); return true; } catch (e) { return false; }
+  });
+}
+function setGenProgress(kind, progress) { _genProgress = { kind, progress }; broadcastProgress(); }
 let _aiWallpaperGen = false;
 let _aiWallpaperGenPromise = null;
 async function generateAiWallpaperToDisk() {
@@ -1656,6 +1827,7 @@ async function generateAiWallpaperToDisk() {
     return _aiWallpaperGenPromise;
   }
   _aiWallpaperGen = true;
+  setGenProgress('image', 0);
   _aiWallpaperGenPromise = (async () => {
     try {
       const cacheDir = path.join(__dirname, '.cache');
@@ -1664,7 +1836,7 @@ async function generateAiWallpaperToDisk() {
       const apiKey = config.apiKey || config.keys?.[0]?.key || '';
       if (!apiKey) throw new Error('no API key');
   
-      const prompt = config.wallpaperPrompt || 'hdr, polar night, vibrant rainbow colors, trees, mountains, glaciers, stars and dark skies';
+      const prompt = config.img_prompt || 'hdr, polar night, vibrant rainbow colors, trees, mountains, glaciers, stars and dark skies';
       const body = JSON.stringify({
         model: 'agnes-image-2.1-flash',
         prompt,
@@ -1743,11 +1915,135 @@ async function generateAiWallpaperToDisk() {
     } catch (e) {
       console.error('[AI] Background generation failed:', e.message);
     } finally {
+      setGenProgress('image', 100);
       _aiWallpaperGen = false;
       _aiWallpaperGenPromise = null;
     }
   })();
   return _aiWallpaperGenPromise;
+}
+
+// --- AI Video Wallpaper Generation ---
+let _aiVideoGen = false;
+let _aiVideoGenPromise = null;
+async function checkVideoGenFeature() {
+  try {
+    if (!platformSession.token) return null;
+    const resp = await fetch(`${PLATFORM_BASE_URL}/api/user/subscription`, {
+      headers: getPlatformHeaders(),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const sub = data.data || (Array.isArray(data) ? data[0] : null);
+    return sub?.features?.video_gen ?? null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function generateAiVideoToDisk() {
+  if (_aiVideoGen) {
+    console.log('[AI Video] Background generation already in progress, waiting...');
+    return _aiVideoGenPromise;
+  }
+  _aiVideoGen = true;
+  setGenProgress('video', 0);
+  _aiVideoGenPromise = (async () => {
+    try {
+      const cacheDir = path.join(__dirname, '.cache');
+      if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+      const vidFile = path.join(cacheDir, 'ai-video.mp4');
+      const apiKey = config.apiKey || config.tokens?.[0]?.token || '';
+      if (!apiKey) throw new Error('no API key');
+
+      const videoAllowed = await checkVideoGenFeature();
+      if (videoAllowed === false) throw new Error('video generation is not available on your plan — upgrade required');
+      if (videoAllowed === null) console.log('[AI Video] Could not verify plan — proceeding anyway');
+
+      const prompt = config.video_prompt || 'cinematic slow motion of a vibrant colorful mountain range landscape with drifting clouds, 5 seconds';
+      const durationMatch = prompt.match(/(\d+(?:\.\d+)?)\s*(?:seconds?|secs?|s)\b/i);
+      const videoDuration = durationMatch ? parseFloat(durationMatch[1]) : 5;
+      const frameRate = 24;
+      const numFrames = calcNumFrames(videoDuration, frameRate);
+
+      const taskResp = await fetch(`${config.upstreamBaseURL}/v1/videos`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent': AGNES_USER_AGENT,
+        },
+        body: JSON.stringify({
+          model: 'agnes-video-v2.0',
+          prompt,
+          width: 1280,
+          height: 768,
+          num_frames: numFrames,
+          frame_rate: frameRate,
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!taskResp.ok) throw new Error(`upstream ${taskResp.status}`);
+      const taskData = await taskResp.json();
+      const taskId = taskData.task_id || taskData.id;
+      if (!taskId) throw new Error('no task id');
+
+      console.log(`[AI Video] Task ${taskId} queued (~${(numFrames / frameRate).toFixed(1)}s), polling...`);
+      const pollInterval = 12000;
+      let queuedSince = 0;
+      let lastProgress = -1;
+      let lastLoggedPct = -1;
+      let videoUrl = null;
+      while (true) {
+        await new Promise(r => setTimeout(r, pollInterval));
+        try {
+          const pollResp = await fetch(`${config.upstreamBaseURL}/v1/videos/${taskId}`, {
+            headers: { 'Authorization': `Bearer ${apiKey}`, 'User-Agent': AGNES_USER_AGENT },
+            signal: AbortSignal.timeout(30000),
+          });
+          if (!pollResp.ok) continue;
+          const pollData = await pollResp.json();
+          const s = pollData.status || 'unknown';
+          const p = typeof pollData.progress === 'number' ? pollData.progress : -1;
+          if (p !== lastLoggedPct) { console.log(`[AI Video] Status: ${s} progress: ${p === -1 ? '?' : p}`); lastLoggedPct = p; }
+          if (p !== lastProgress && p >= 0) { lastProgress = p; setGenProgress('video', p); }
+          if (s === 'completed' || s === 'succeeded') {
+            videoUrl = pollData.video_url || pollData.remixed_from_video_id || pollData.url || pollData.output?.url || pollData.result?.url || pollData.download_url || pollData.public_url || pollData.uri || pollData.output?.video_url || pollData.result?.video_url || (Array.isArray(pollData.files) && pollData.files[0]?.url) || (Array.isArray(pollData.data) && pollData.data[0]?.url);
+            if (!videoUrl) console.log('[AI Video] Completed but no URL found in:', Object.keys(pollData), JSON.stringify(pollData).slice(0, 500));
+            break;
+          }
+          if (s === 'failed' || s === 'error') {
+            throw new Error(pollData.error || pollData.message || 'video generation failed');
+          }
+          if (s === 'queued') {
+            if (queuedSince === 0) queuedSince = Date.now();
+            else if (Date.now() - queuedSince > 30000) {
+              throw new Error('video stuck in queue — likely requires a paid plan (video_gen feature)');
+            }
+          } else {
+            queuedSince = 0;
+          }
+        } catch (e) { if (e.message.includes('stuck in queue') || e.message.includes('failed')) throw e; }
+      }
+      if (!videoUrl) throw new Error('video timed out');
+
+      const dl = await fetch(videoUrl);
+      if (!dl.ok) throw new Error(`download ${dl.status}`);
+      const buf = Buffer.from(await dl.arrayBuffer());
+      if (!buf || buf.length < 1024) throw new Error('downloaded video too small');
+      fs.writeFileSync(vidFile, buf);
+      console.log(`[AI Video] Saved ${(buf.length / 1024 / 1024).toFixed(2)} MB to ai-video.mp4`);
+    } catch (e) {
+      console.error('[AI Video] Background generation failed:', e.message);
+    } finally {
+      setGenProgress('video', 100);
+      _aiVideoGen = false;
+      _aiVideoGenPromise = null;
+    }
+  })();
+  return _aiVideoGenPromise;
 }
 
 // --- Main Request Handler ---
@@ -1784,6 +2080,22 @@ async function handleRequest(req, res) {
           const imgBuf = fs.readFileSync(aiFile);
           wpStyle = '<style>body{background:url(data:image/jpeg;base64,' + imgBuf.toString('base64') + ') center/cover no-repeat fixed}</style>';
         } catch (e) { console.error('[AI] Failed to generate ai-paper:', e.message); }
+      }
+    } else if (wpMode === 'ai-video') {
+      const vidFile = path.join(cacheDir, 'ai-video.mp4');
+      if (fs.existsSync(vidFile)) {
+        wpStyle = '<style>#wp-video-bg{position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;z-index:-2;pointer-events:none;background:#0d1117}#wp-video-fallback{position:fixed;inset:0;background:#0d1117;z-index:-3}</style>'
+                + '<video id="wp-video-bg" autoplay loop muted playsinline preload="auto" src="/api/bg?t=' + Date.now() + '"></video><div id="wp-video-fallback"></div>';
+        generateAiVideoToDisk().catch(() => {});
+      } else {
+        wpStyle = '<style>#wp-video-fallback{position:fixed;inset:0;background:#0d1117;z-index:-2}</style><div id="wp-video-fallback"></div>';
+        try {
+          await generateAiVideoToDisk();
+          if (fs.existsSync(vidFile)) {
+            wpStyle = '<style>#wp-video-bg{position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;z-index:-2;pointer-events:none;background:#0d1117}#wp-video-fallback{position:fixed;inset:0;background:#0d1117;z-index:-3}</style>'
+                    + '<video id="wp-video-bg" autoplay loop muted playsinline preload="auto" src="/api/bg?t=' + Date.now() + '"></video><div id="wp-video-fallback"></div>';
+          }
+        } catch (e) { console.error('[AI Video] Failed to generate ai-video:', e.message); }
       }
     } else if (wpMode === 'bing') {
       const imgCacheFile = path.join(cacheDir, 'wallpaper.jpg');
@@ -1868,7 +2180,8 @@ async function handleRequest(req, res) {
           config.localOverwrite = (typeof v === 'string' && v.trim()) ? v.trim().toLowerCase().split(/[-_]/)[0].slice(0, 8) : null;
         }
         if (newConfig.wallpaperMode) config.wallpaperMode = newConfig.wallpaperMode;
-        if (newConfig.wallpaperPrompt !== undefined) config.wallpaperPrompt = newConfig.wallpaperPrompt;
+        if (newConfig.img_prompt !== undefined) config.img_prompt = newConfig.img_prompt;
+        if (newConfig.video_prompt !== undefined) config.video_prompt = newConfig.video_prompt;
         if (Array.isArray(newConfig.enabledModels)) config.enabledModels = newConfig.enabledModels;
         if (Array.isArray(newConfig.platformUsers)) {
           config.platformUsers = newConfig.platformUsers.map(u => ({
@@ -2025,6 +2338,32 @@ async function handleRequest(req, res) {
         ...k,
         plan_name: k.plan_name && k.plan_name.trim() ? k.plan_name : (planName || 'Default'),
       }));
+      // Also try the premium subscription key reveal endpoint
+      try {
+        const premiumController = new AbortController();
+        const premiumTimer = setTimeout(() => premiumController.abort(), 10000);
+        const premiumResp = await fetch(`${PLATFORM_BASE_URL}/api/user/subscription/key/reveal`, {
+          method: 'POST',
+          headers: { ...getPlatformHeaders(), 'Content-Type': 'application/json' },
+          body: null,
+          signal: premiumController.signal,
+        });
+        clearTimeout(premiumTimer);
+        if (premiumResp.ok) {
+          const premiumBody = await premiumResp.json();
+          if (premiumBody.code === 200 && premiumBody.data?.key) {
+            enriched.push({
+              id: `premium_${premiumBody.data.id || '0'}`,
+              name: planName || 'Premium Plan',
+              preview: premiumBody.data.key.substring(0, 8) + '…',
+              plan_name: planName || 'Premium',
+              status: 'active',
+              full_key: premiumBody.data.key,
+              _revealed: true,
+            });
+          }
+        }
+      } catch (e) { /* premium reveal is optional */ }
       writeJSON(res, 200, { keys: enriched, plan_name: planName, username: acctName });
     } catch (e) {
       writeJSON(res, 500, { error: e.message });
@@ -2089,6 +2428,36 @@ async function handleRequest(req, res) {
       }
     }
 
+    if (mode === 'ai-video') {
+      if (!hasApiToken()) {
+        mode = 'bing';
+      } else {
+        const vidFile = path.join(cacheDir, 'ai-video.mp4');
+        if (fs.existsSync(vidFile)) {
+          const vidData = fs.readFileSync(vidFile);
+          res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': vidData.length, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' });
+          res.end(vidData);
+          generateAiVideoToDisk().catch(() => {});
+          return;
+        }
+        try {
+          await generateAiVideoToDisk();
+          if (fs.existsSync(vidFile)) {
+            const vidData = fs.readFileSync(vidFile);
+            res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': vidData.length, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' });
+            res.end(vidData);
+            return;
+          }
+          res.writeHead(204);
+          res.end();
+        } catch (e) {
+          res.writeHead(500);
+          res.end();
+        }
+        return;
+      }
+    }
+
     const imgCacheFile = path.join(cacheDir, 'wallpaper.jpg');
     const today = new Date().toISOString().split('T')[0];
     const cachedDate = fs.existsSync(imgCacheFile) ? fs.statSync(imgCacheFile).mtime.toISOString().split('T')[0] : '';
@@ -2145,6 +2514,30 @@ async function handleRequest(req, res) {
         writeJSON(res, 500, { error: e.message });
       }
     }
+    return;
+  }
+
+  if (pathname === '/api/wallpaper-progress' && req.method === 'GET') {
+    const accept = req.headers['accept'] || '';
+    if (accept.includes('text/event-stream')) {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'Access-Control-Allow-Origin': '*' });
+      res.write(`data: ${JSON.stringify(_genProgress)}\n\n`);
+      _sseClients.push(res);
+      req.on('close', () => { _sseClients = _sseClients.filter(c => c !== res); });
+      return;
+    }
+    writeJSON(res, 200, _genProgress);
+    return;
+  }
+
+  if (pathname === '/api/generate-video' && req.method === 'POST') {
+    if (!hasApiToken()) {
+      writeJSON(res, 403, { error: 'AI video generation requires an API token. Add a token in config.' });
+      return;
+    }
+    generateAiVideoToDisk()
+      .then(() => writeJSON(res, 200, { success: true, url: `/api/bg?t=${Date.now()}` }))
+      .catch((e) => writeJSON(res, 500, { error: e.message }));
     return;
   }
 
