@@ -4,8 +4,16 @@ setlocal enabledelayedexpansion
 taskkill /F /FI "WINDOWTITLE eq Agnes2Opencode - Node.js Mode" /T >nul 2>&1
 timeout /t 1 /nobreak >nul
 
-title Agnes2Opencode - Node.js Mode
 cd /d "%~dp0"
+
+:: Detect port from config first
+set "PORT=8082"
+set "CONFIG_FILE=%~dp0.config\config.json"
+if exist "%CONFIG_FILE%" (
+    for /f "usebackq delims=" %%a in (`powershell -NoProfile -Command "$c=Get-Content '%CONFIG_FILE%' -Raw ^| ConvertFrom-Json; $l=$c.LISTEN_ADDR; if($l -match ':(?<p>\d+)$'){Write-Output $matches['p']}else{Write-Output '8082'}"`) do set "PORT=%%a"
+)
+
+title Agnes2Opencode - Node.js Mode
 
 echo ==================================================
 echo  Agnes2Opencode - Node.js Mode
@@ -14,7 +22,7 @@ echo ==================================================
 echo.
 
 echo [1/3] Cleaning up...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8080.*LISTENING" 2^>nul') do (
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%PORT% " ^| findstr "LISTENING"') do (
     taskkill /PID %%a /F >nul 2>&1
 )
 timeout /t 1 /nobreak >nul
@@ -28,8 +36,8 @@ echo [INFO] Runtime: Node.js
 echo [3/3] Starting proxy...
 echo.
 echo ==================================================
-echo  Proxy: http://localhost:8080
-echo  Dashboard: http://localhost:8080/dashboard
+echo  Proxy: http://localhost:%PORT%
+echo  Dashboard: http://localhost:%PORT%/dashboard
 echo ==================================================
 echo.
 

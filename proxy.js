@@ -95,7 +95,7 @@ let responseCache = new ResponseCache();
 function loadConfig() {
   const configPath = path.join(__dirname, '.config', 'config.json');
   let rawConfig = {
-    LISTEN_ADDR: '127.0.0.1:8080',
+    LISTEN_ADDR: '127.0.0.1:8082',
     UPSTREAM_BASE_URL: AGNES_API_BASE,
     REQUEST_TIMEOUT: '15m',
     CACHE_TTL: '60s',
@@ -125,12 +125,46 @@ function loadConfig() {
 
   let baseURL = rawConfig.UPSTREAM_BASE_URL.trim().replace(/\/+$/, '');
 
-  const rawTokens = rawConfig.TOKENS;
-  let tokens = Array.isArray(rawTokens) && rawTokens.length > 0 ? rawTokens : [];
-  if (tokens.length === 0) {
-    tokens.push({ name: rawConfig.API_KEY ? 'Key 1' : 'Key 1', token: rawConfig.API_KEY || '', session: '' });
+  const rawKeys = rawConfig.KEYS || rawConfig.TOKENS;
+  let keys = Array.isArray(rawKeys) && rawKeys.length > 0 ? rawKeys : [];
+  keys = keys.filter(t => t && (t.key || t.token));
+  if (keys.length === 0) {
+    keys.push({ name: 'Key 1', key: rawConfig.API_KEY || '', session: '' });
+    keys = keys.filter(t => t && (t.key || t.token));
+    if (keys.length === 0) keys.push({ name: 'Key 1', key: '', session: '' });
   }
-  tokens = tokens.map(t => ({ name: t.name || 'Unnamed', token: t.token || '', email: t.email || '', platformUsername: t.platformUsername || '', platformPassword: t.platformPassword || '', platformToken: t.platformToken || '', platformUser: t.platformUser || null }));
+  keys = keys.map(t => ({ name: t.name || 'Unnamed', key: t.key || t.token || '', email: t.email || '', platformUsername: t.platformUsername || '', platformPassword: t.platformPassword || '', platformToken: t.platformToken || '', platformUser: t.platformUser || null }));
+
+  // Load platform users array
+  let platformUsers = Array.isArray(rawConfig.PLATFORM_USERS) ? rawConfig.PLATFORM_USERS : [];
+  // Backward compat: migrate from keys[0] if platformUsers is empty
+  if (platformUsers.length === 0 && keys.length > 0 && keys[0].platformUsername) {
+    platformUsers.push({
+      username: keys[0].platformUsername,
+      password: keys[0].platformPassword || '',
+      token: keys[0].platformToken || '',
+      user: keys[0].platformUser || null,
+    });
+  }
+  platformUsers = platformUsers.map(u => ({
+    username: u.username || '',
+    password: u.password || '',
+    token: u.token || '',
+    user: u.user || null,
+  }));
+
+  // Link keys to platform users by username
+  keys = keys.map(t => {
+    if (t.platformUsername && !platformUsers.find(u => u.username === t.platformUsername)) {
+      platformUsers.push({
+        username: t.platformUsername,
+        password: t.platformPassword || '',
+        token: t.platformToken || '',
+        user: t.platformUser || null,
+      });
+    }
+    return { name: t.name || 'Unnamed', key: t.key || '', platformUser: t.platformUser || t.platformUsername || '' };
+  });
 
   const rawModels = rawConfig.ENABLED_MODELS;
   const enabledModels = Array.isArray(rawModels) && rawModels.length > 0 ? rawModels : [...AGNES_MODELS];
@@ -138,21 +172,18 @@ function loadConfig() {
   return {
     listenAddr: rawConfig.LISTEN_ADDR,
     upstreamBaseURL: baseURL,
-    apiKey: tokens[0].token || rawConfig.API_KEY || '',
+    apiKey: keys[0].key || rawConfig.API_KEY || '',
     requestTimeout,
     apiKeys: [...new Set(rawConfig.API_KEYS || [])],
     enabledModels,
-    tokens,
+    keys,
+    platformUsers,
     cacheTtl: parseDuration(rawConfig.CACHE_TTL || '60s') || 60000,
     cacheMaxSize: Math.max(0, rawConfig.CACHE_MAX_SIZE || 100),
     cacheEnabled: rawConfig.CACHE_ENABLED !== false,
     testMode: rawConfig.TEST_MODE !== false,
     wallpaperMode: rawConfig.WALLPAPER_MODE || 'bing',
     wallpaperPrompt: rawConfig.WALLPAPER_PROMPT || 'realistic vibrant colorful mountain range landscape',
-    platformToken: null,
-    platformUser: null,
-    platformUsername: null,
-    platformPassword: null,
   };
 }
 
@@ -173,13 +204,21 @@ function saveConfig(cfg) {
   const dir = path.dirname(configPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   if (!Array.isArray(cfg.enabledModels) || cfg.enabledModels.length === 0) cfg.enabledModels = dynamicModels && dynamicModels.length > 0 ? [...dynamicModels] : [...AGNES_MODELS];
+  if (Array.isArray(cfg.keys)) cfg.keys = cfg.keys.filter(t => t && (t.key || t.token));
+  const platformUsers = (cfg.platformUsers || []).map(u => ({
+    username: u.username || '',
+    password: u.password || '',
+    token: u.token || '',
+    user: u.user || null,
+  }));
   fs.writeFileSync(configPath, JSON.stringify({
     LISTEN_ADDR: cfg.listenAddr,
     UPSTREAM_BASE_URL: cfg.upstreamBaseURL,
     API_KEY: cfg.apiKey,
     REQUEST_TIMEOUT: `${cfg.requestTimeout / (60 * 1000)}m`,
     API_KEYS: cfg.apiKeys,
-    TOKENS: cfg.tokens,
+    KEYS: cfg.keys,
+    PLATFORM_USERS: platformUsers,
     ENABLED_MODELS: cfg.enabledModels,
     WALLPAPER_MODE: cfg.wallpaperMode || 'bing',
     WALLPAPER_PROMPT: cfg.wallpaperPrompt || 'realistic vibrant colorful mountain range landscape',
@@ -187,7 +226,8 @@ function saveConfig(cfg) {
     CACHE_MAX_SIZE: cfg.cacheMaxSize || 100,
     CACHE_ENABLED: cfg.cacheEnabled !== false,
     TEST_MODE: cfg.testMode !== false,
-    TOKENS: cfg.tokens,
+    KEYS: cfg.keys,
+    PLATFORM_USERS: platformUsers,
   }, null, 2));
 }
 
@@ -206,8 +246,8 @@ function fingerprintPayload(payload) {
 }
 
 function detectSessionSignal(payload) {
-  const tokens = config.tokens || [];
-  if (tokens.length < 1) return null;
+  const keys = config.keys || [];
+  if (keys.length < 1) return null;
 
   const fingerprint = fingerprintPayload(payload);
   if (!fingerprint) return null;
@@ -217,16 +257,16 @@ function detectSessionSignal(payload) {
     entry.requestCount++;
     if (entry.tokenIndex !== currentTokenIndex) {
       currentTokenIndex = entry.tokenIndex;
-      config.apiKey = tokens[currentTokenIndex].token;
-      if (upstream) upstream.apiKey = tokens[currentTokenIndex].token;
+      config.apiKey = keys[currentTokenIndex].key;
+      if (upstream) upstream.apiKey = keys[currentTokenIndex].key;
     }
     return entry;
   }
 
-  if (tokens.length > 1) {
-    currentTokenIndex = (currentTokenIndex + 1) % tokens.length;
-    config.apiKey = tokens[currentTokenIndex].token;
-    if (upstream) upstream.apiKey = tokens[currentTokenIndex].token;
+  if (keys.length > 1) {
+    currentTokenIndex = (currentTokenIndex + 1) % keys.length;
+    config.apiKey = keys[currentTokenIndex].key;
+    if (upstream) upstream.apiKey = keys[currentTokenIndex].key;
   }
   const newEntry = { tokenIndex: currentTokenIndex, requestCount: 1, sessNum: ++globalSessionCounter };
   conversationMap.set(fingerprint, newEntry);
@@ -237,7 +277,7 @@ function detectSessionSignal(payload) {
   if (stampIdx < 0) stampIdx = msgs.findIndex(m => m.role === 'user');
   const m = msgs[stampIdx];
   const curIdx = currentTokenIndex;
-  const label = `${tokens[curIdx].name}|sess${newEntry.sessNum}`;
+  const label = `${keys[curIdx].name}|sess${newEntry.sessNum}`;
   const setter = (c) => { if (typeof c === 'string') return `[${label}] ${c}`; if (Array.isArray(c)) { const b = c.find(p => p?.type === 'text'); if (b) b.text = `[${label}] ${b.text}`; } return c; };
   m.content = setter(m.content);
   return newEntry;
@@ -335,14 +375,19 @@ async function loginToPlatform(username, password) {
       user: user || null,
       expiresAt: Date.now() + 24 * 60 * 60 * 1000,
     };
-    // Save platform credentials back to the first token
-    if (config.tokens && config.tokens.length > 0) {
-      config.tokens[0].platformToken = access_token;
-      config.tokens[0].platformUser = user || null;
-      config.tokens[0].platformUsername = username;
-      config.tokens[0].platformPassword = password;
-      saveConfig(config);
+    // Save to platformUsers array
+    const existingIdx = config.platformUsers.findIndex(u => u.username === username);
+    const puEntry = { username, password, token: access_token, user: user || null };
+    if (existingIdx >= 0) {
+      config.platformUsers[existingIdx] = puEntry;
+    } else {
+      config.platformUsers.push(puEntry);
     }
+    // Also set platformUser on the token that matches this username
+    for (const t of config.keys) {
+      if (t.platformUser === username) break;
+    }
+    saveConfig(config);
     if (prevToken !== access_token || prevUser !== (user?.email)) {
       console.log(`[Platform] Login successful for ${username}`);
     }
@@ -380,6 +425,67 @@ async function platformGetUserInfo() {
   } catch (e) { clearTimeout(timer); throw e; }
 }
 
+async function platformGetUserKeys() {
+  if (!platformSession.token) { console.log('[Platform] No session token, skipping key fetch'); return null; }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    const resp = await fetch(`${PLATFORM_BASE_URL}/api/token`, {
+      method: 'GET',
+      headers: { ...getPlatformHeaders(), 'x-user-language': 'en' },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const body = await resp.json();
+    console.log('[Platform] /api/token response:', JSON.stringify(body).substring(0, 300));
+    if (body.code !== 200 || !body.data?.items) { console.log('[Platform] No items in response'); return null; }
+    return body.data.items.map((k, i) => ({
+      id: k.id,
+      name: k.name || `Key ${i + 1}`,
+      preview: k.key_preview || '',
+      plan_name: k.key_profile || 'Default',
+      status: k.status === 1 ? 'active' : 'inactive',
+      full_key: '',
+    }));
+  } catch (e) { console.error('[Platform] Key fetch failed:', e.message); return null; }
+}
+
+async function platformGetTokenKey(tokenId) {
+  if (!platformSession.token) return null;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    const resp = await fetch(`${PLATFORM_BASE_URL}/api/token/${tokenId}/key`, {
+      method: 'POST',
+      headers: { ...getPlatformHeaders(), 'Content-Type': 'application/json' },
+      body: null,
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!resp.ok) return null;
+    const body = await resp.json();
+    if (body.code !== 200 || !body.data?.key) return null;
+    return body.data.key;
+  } catch (e) { return null; }
+}
+
+async function platformGetSubscriptionPlanName() {
+  if (!platformSession.token) return 'Default';
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    const resp = await fetch(`${PLATFORM_BASE_URL}/api/user/subscription`, {
+      headers: getPlatformHeaders(),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!resp.ok) return 'Default';
+    const data = await resp.json();
+    const sub = data?.data || (Array.isArray(data) ? data[0] : null);
+    return sub?.plan_name || 'Default';
+  } catch (e) { return 'Default'; }
+}
+
 // --- Model Registry ---
 const AGNES_MODELS = [
   'agnes-2.0-flash',
@@ -397,7 +503,7 @@ async function fetchRemoteModels() {
       return dynamicModels;
     }
 
-    const apiKey = config?.apiKey || config?.tokens?.[0]?.token || '';
+    const apiKey = config?.apiKey || config?.keys?.[0]?.key || '';
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
 
@@ -723,34 +829,25 @@ async function getAccountInfo() {
 
 async function handleAccountInfo(req, res) {
   if (req.method !== 'GET') { writeOpenAIError(res, 405, 'method not allowed', 'invalid_request_error', ''); return; }
-  if (!platformSession.token) {
-    writeJSON(res, 200, { logged_in: false, user: null });
-    return;
-  }
-  try {
-    const userData = await platformGetUserInfo();
-    writeJSON(res, 200, { logged_in: true, user: userData?.data || platformSession.user });
-  } catch (e) {
-    writeJSON(res, 200, { logged_in: true, user: platformSession.user });
-  }
+  const users = (config.platformUsers || []).map(u => ({
+    username: u.username,
+    email: u.user?.email || '',
+    is_active: u.user?.is_active,
+    token_valid: !!u.token,
+    last_login: u.user?.last_login || '',
+    created_at: u.user?.created_at || '',
+  }));
+  writeJSON(res, 200, {
+    logged_in: !!platformSession.token,
+    user: platformSession.user || null,
+    platform_users: users,
+  });
+  return;
 }
 
-async function checkImageGenFeature() {
-  if (config.testMode) return false;
-  if (!platformSession.token) return false;
-  try {
-    const resp = await fetch(`${PLATFORM_BASE_URL}/api/user/subscription`, {
-      headers: getPlatformHeaders(),
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!resp.ok) return false;
-    const data = await resp.json();
-    const sub = data.data || (Array.isArray(data) ? data[0] : null);
-    if (!sub) return false;
-    return !!(sub.features && sub.features.image_gen);
-  } catch (e) {
-    return false;
-  }
+function hasApiToken() {
+  const keys = config.keys || [];
+  return keys.length > 0 && keys.some(t => t.key);
 }
 
 async function handleStepPlanStatus(req, res) {
@@ -846,13 +943,13 @@ async function handleHealthz(req, res) {
   let modelsData = null;
   try { modelsData = await upstream.getUserInfo(); }
   catch (e) { /* ignore */ }
-  const tokenState = (config.tokens || []).map(t => {
-    const maskedToken = t.token ? t.token.substring(0, 10) + '...' + t.token.substring(t.token.length - 4) : '';
+  const tokenState = (config.keys || []).filter(t => t && t.key).map(t => {
+    const maskedToken = t.key ? t.key.substring(0, 10) + '...' + t.key.substring(t.key.length - 4) : '';
     return {
       name: t.name || 'Unnamed Key',
-      token: maskedToken,
-      has_token: !!t.token,
-      status: t.token ? (modelsData ? 'active' : 'unknown') : 'none',
+      key: maskedToken,
+      has_key: !!t.key,
+      status: t.key ? (modelsData ? 'active' : 'unknown') : 'none',
     };
   });
   writeJSON(res, 200, {
@@ -870,10 +967,10 @@ async function handleHealthz(req, res) {
     platform: {
       logged_in: !!platformSession.token,
       user: platformSession.user?.email || null,
-      tokens: (config.tokens || []).map(t => ({
-        name: t.name,
-        logged_in: !!t.platformToken,
-        email: t.platformUser?.email || null,
+      users: (config.platformUsers || []).map(u => ({
+        username: u.username,
+        logged_in: !!u.token,
+        email: u.user?.email || null,
       })),
     },
   });
@@ -921,12 +1018,14 @@ async function proxyChatRequest(res, payload, requestedModel) {
 
   if (!config.apiKey) { writeOpenAIError(res, 503, 'no Agnes AI API key configured', 'server_error', 'no_api_key'); return; }
 
-  const tokens = config.tokens || [];
+  const keys = config.keys || [];
   const curIdx = currentTokenIndex;
-  const name = curIdx >= 0 && curIdx < tokens.length ? tokens[curIdx].name : '?';
+  const name = curIdx >= 0 && curIdx < keys.length ? keys[curIdx].name : '?';
   const sessNum = session?.sessNum || '?';
-  const promptPreview = extractUserPrompt(payload).substring(0, 120);
+  const promptPreview = extractUserPrompt(payload);
   const ts = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const usedToken = config.apiKey || '';
+  const tokenPreview = usedToken ? usedToken.substring(0, 8) + '...' + usedToken.substring(usedToken.length - 4) : 'none';
 
   // Test mode: return a mock "Test" response instead of calling the real API
   if (config.testMode) {
@@ -944,7 +1043,7 @@ async function proxyChatRequest(res, payload, requestedModel) {
     });
     try { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(mockResponse); }
     catch (e) { /* ignore */ }
-    console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-done:0ms (test mode)`);
+    console.log(`${ts} [Token: ${tokenPreview}] [Session#${sessNum}>${name}]-[${requestedModel}]-done:0ms (test mode)`);
     return;
   }
 
@@ -954,15 +1053,15 @@ async function proxyChatRequest(res, payload, requestedModel) {
     ck = cacheKey(payload, requestedModel);
     const cached = responseCache.get(ck);
     if (cached) {
-      console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-${JSON.stringify(promptPreview)}-cache:HIT`);
+      console.log(`${ts} [Token: ${tokenPreview}] [Session#${sessNum}>${name}]-[${requestedModel}]-cache:HIT`);
       try { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(cached); }
       catch (e) { /* ignore */ }
-      console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-done:0ms (cached)`);
+      console.log(`${ts} [Token: ${tokenPreview}] [Session#${sessNum}>${name}]-[${requestedModel}]-done:0ms (cached)`);
       return;
     }
   }
 
-  console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-${JSON.stringify(promptPreview)}`);
+  console.log(`${ts} [Token: ${tokenPreview}] [Session#${sessNum}>${name}]-[${requestedModel}]-prompt: ${JSON.stringify(promptPreview)}`);
 
   const cloned = cloneMap(payload);
   cloned.model = requestedModel;
@@ -1014,22 +1113,22 @@ async function proxyChatRequest(res, payload, requestedModel) {
           }
         }
       } catch (e) { console.error(`proxy response copy failed: ${e.message}`); return { retry: false }; }
-      console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-done:${Date.now() - reqStart}ms`);
+      console.log(`${ts} [Token: ${tokenPreview}] [Session#${sessNum}>${name}]-[${requestedModel}]-done:${Date.now() - reqStart}ms`);
       return { retry: false };
     }
 
     const errorBodyStr = (await readBodyWithDecompress(resp.body, resp.headers['content-encoding'])).toString();
     if (isModelUnavailableError(errorBodyStr) || isQueryEngineError(errorBodyStr)) {
       if (isLast) {
-        console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-error:${resp.status}`);
+        console.log(`${ts} [Token: ${tokenPreview}] [Session#${sessNum}>${name}]-[${requestedModel}]-error:${resp.status}`);
         writePassthroughError(res, resp.status, errorBodyStr);
         return { retry: false };
       }
       const reason = isQueryEngineError(errorBodyStr) ? 'query_engine' : 'unavailable';
-      console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-retry:${reason}`);
+      console.log(`${ts} [Token: ${tokenPreview}] [Session#${sessNum}>${name}]-[${requestedModel}]-retry:${reason}`);
       return { retry: true };
     }
-    console.log(`${ts} [Session#${sessNum}>${name}]-[${requestedModel}]-error:${resp.status}`);
+    console.log(`${ts} [Token: ${tokenPreview}] [Session#${sessNum}>${name}]-[${requestedModel}]-error:${resp.status}`);
     writePassthroughError(res, resp.status, errorBodyStr);
     return { retry: false };
   });
@@ -1090,7 +1189,7 @@ async function generateAiWallpaperToDisk() {
       const cacheDir = path.join(__dirname, '.cache');
       if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
       const aiFile = path.join(cacheDir, 'ai-paper.jpg');
-      const apiKey = config.apiKey || config.tokens?.[0]?.token || '';
+      const apiKey = config.apiKey || config.keys?.[0]?.key || '';
       if (!apiKey) throw new Error('no API key');
   
       const prompt = config.wallpaperPrompt || 'hdr, polar night, vibrant rainbow colors, trees, mountains, glaciers, stars and dark skies';
@@ -1107,12 +1206,17 @@ async function generateAiWallpaperToDisk() {
           model: 'agnes-image-2.1-flash',
           prompt,
           n: 1,
-          size: '1024x1024',
+          size: '1024x768',
+          seed: Date.now(),
         }),
         signal: controller.signal,
       });
       clearTimeout(timer);
-      if (!resp.ok) throw new Error(`upstream ${resp.status}`);
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        console.error(`[AI] Upstream error ${resp.status}: ${errBody}`);
+        throw new Error(`upstream ${resp.status}: ${errBody}`);
+      }
   
       const data = await resp.json();
       let imageUrl = '';
@@ -1244,7 +1348,12 @@ async function handleRequest(req, res) {
   }
 
   if (pathname === '/api/config') {
-    if (req.method === 'GET') { writeJSON(res, 200, { ...config, apiKey: config.apiKey ? config.apiKey.substring(0, 10) + '...' : '', platformToken: '' }); return; }
+    if (req.method === 'GET') {
+      const maskedConfig = { ...config, apiKey: config.apiKey ? config.apiKey.substring(0, 10) + '...' : '' };
+      delete maskedConfig.platformToken;
+      writeJSON(res, 200, maskedConfig);
+      return;
+    }
     if (req.method === 'POST') {
       try {
         const body = await readBody(req);
@@ -1256,7 +1365,23 @@ async function handleRequest(req, res) {
         if (newConfig.wallpaperMode) config.wallpaperMode = newConfig.wallpaperMode;
         if (newConfig.wallpaperPrompt !== undefined) config.wallpaperPrompt = newConfig.wallpaperPrompt;
         if (Array.isArray(newConfig.enabledModels)) config.enabledModels = newConfig.enabledModels;
-        if (Array.isArray(newConfig.tokens)) config.tokens = newConfig.tokens;
+        if (Array.isArray(newConfig.platformUsers)) {
+          config.platformUsers = newConfig.platformUsers.map(u => ({
+            username: u.username || '',
+            password: u.password || '',
+            token: u.token || '',
+            user: u.user || null,
+          }));
+        }
+        if (Array.isArray(newConfig.keys)) {
+          config.keys = newConfig.keys;
+          if (config.keys.length > 0) {
+            const firstKey = config.keys[0].key || '';
+            config.apiKey = firstKey;
+            if (upstream) upstream.apiKey = firstKey;
+            currentTokenIndex = 0;
+          }
+        }
         saveConfig(config);
         setupOpencodeConfig();
         writeJSON(res, 200, { success: true });
@@ -1297,15 +1422,67 @@ async function handleRequest(req, res) {
   }
 
   if (pathname === '/api/logout' && req.method === 'POST') {
+    const username = platformSession.user?.username || platformSession.user?.email || '';
     platformSession = { token: null, user: null, expiresAt: 0 };
-    if (config.tokens && config.tokens.length > 0) {
-      config.tokens[0].platformToken = '';
-      config.tokens[0].platformUser = null;
-      config.tokens[0].platformUsername = '';
-      config.tokens[0].platformPassword = '';
-      saveConfig(config);
+    if (username && config.platformUsers) {
+      const usernameLower = username.toLowerCase();
+      const idx = config.platformUsers.findIndex(u =>
+        u.username.toLowerCase() === usernameLower ||
+        (u.user?.email && u.user.email.toLowerCase() === usernameLower) ||
+        (u.user?.username && u.user.username.toLowerCase() === usernameLower)
+      );
+      if (idx >= 0) {
+        const puName = config.platformUsers[idx].username;
+        config.platformUsers.splice(idx, 1);
+        config.keys = config.keys.filter(t => !t.platformUser || t.platformUser.toLowerCase() !== puName.toLowerCase());
+      }
     }
+    if (username) {
+      const usernameLower = username.toLowerCase();
+      const before = config.keys.length;
+      config.keys = config.keys.filter(t => !t.platformUser || t.platformUser.toLowerCase() !== usernameLower);
+      if (config.keys.length !== before) {
+        config.platformSession = { activeUsername: null };
+      }
+    }
+    if (!config.keys || config.keys.length === 0) {
+      config.keys = [{ name: 'Key 1', key: '', platformUser: '' }];
+    } else {
+      config.keys = config.keys.filter(t => t && (t.key || t.token));
+      if (config.keys.length === 0) config.keys.push({ name: 'Key 1', key: '', platformUser: '' });
+    }
+    config.apiKey = config.keys[0]?.key || '';
+    saveConfig(config);
+    setupOpencodeConfig();
     writeJSON(res, 200, { success: true });
+    return;
+  }
+
+  if (pathname === '/api/platform-users' && req.method === 'GET') {
+    const users = (config.platformUsers || []).map(u => ({
+      username: u.username,
+      email: u.user?.email || '',
+      logged_in: !!u.token,
+      is_active: u.user?.is_active,
+      last_login: u.user?.last_login || '',
+    }));
+    writeJSON(res, 200, { users });
+    return;
+  }
+
+  if (pathname === '/api/platform-users' && req.method === 'DELETE') {
+    try {
+      const body = await readBody(req);
+      const { username } = JSON.parse(body);
+      if (!username) { writeJSON(res, 400, { error: 'username required' }); return; }
+      const idx = config.platformUsers.findIndex(u => u.username.toLowerCase() === username.toLowerCase());
+      if (idx < 0) { writeJSON(res, 404, { error: 'User not found' }); return; }
+      config.platformUsers.splice(idx, 1);
+      config.keys = config.keys.filter(t => t.platformUser && t.platformUser.toLowerCase() !== username.toLowerCase());
+      if (config.keys.length === 0) config.keys.push({ name: 'Key 1', key: '' });
+      saveConfig(config);
+      writeJSON(res, 200, { success: true });
+    } catch (e) { writeJSON(res, 400, { error: e.message }); }
     return;
   }
 
@@ -1317,6 +1494,46 @@ async function handleRequest(req, res) {
     try {
       const userInfo = await platformGetUserInfo();
       writeJSON(res, 200, { success: true, user: userInfo });
+    } catch (e) {
+      writeJSON(res, 500, { error: e.message });
+    }
+    return;
+  }
+
+  if (pathname === '/api/platform/keys' && req.method === 'GET') {
+    if (!platformSession.token) {
+      writeJSON(res, 401, { error: 'Not logged in' });
+      return;
+    }
+    try {
+      const planName = await platformGetSubscriptionPlanName();
+      let keys = await platformGetUserKeys();
+      let acctName = platformSession.user?.username || platformSession.user?.email || platformSession.user?.name || '';
+      if (!acctName) {
+        try {
+          const ui = await platformGetUserInfo();
+          const u = ui?.data || ui;
+          acctName = u?.username || u?.email || '';
+        } catch (e) { /* ignore */ }
+      }
+      const enriched = (keys || []).map(k => ({
+        ...k,
+        plan_name: k.plan_name && k.plan_name.trim() ? k.plan_name : (planName || 'Default'),
+      }));
+      writeJSON(res, 200, { keys: enriched, plan_name: planName, username: acctName });
+    } catch (e) {
+      writeJSON(res, 500, { error: e.message });
+    }
+    return;
+  }
+
+  const tokenKeyMatch = pathname.match(/^\/api\/platform\/token\/(\d+)\/key$/);
+  if (tokenKeyMatch && req.method === 'GET') {
+    if (!platformSession.token) { writeJSON(res, 401, { error: 'Not logged in' }); return; }
+    try {
+      const key = await platformGetTokenKey(tokenKeyMatch[1]);
+      if (!key) { writeJSON(res, 404, { error: 'Key not found' }); return; }
+      writeJSON(res, 200, { key });
     } catch (e) {
       writeJSON(res, 500, { error: e.message });
     }
@@ -1343,8 +1560,7 @@ async function handleRequest(req, res) {
     if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
 
     if (mode === 'ai') {
-      const imageGenAllowed = await checkImageGenFeature();
-      if (!imageGenAllowed) {
+      if (!hasApiToken()) {
         mode = 'bing';
       } else {
         const aiFile = path.join(cacheDir, 'ai-paper.jpg');
@@ -1410,9 +1626,8 @@ async function handleRequest(req, res) {
   }
 
   if (pathname === '/api/generate-image' && req.method === 'POST') {
-    const allowed = await checkImageGenFeature();
-    if (!allowed) {
-      writeJSON(res, 403, { error: 'AI image generation requires Plus plan' });
+    if (!hasApiToken()) {
+      writeJSON(res, 403, { error: 'AI image generation requires an API token. Add a token in config.' });
       return;
     }
     try {
@@ -1430,12 +1645,18 @@ async function handleRequest(req, res) {
 
   if (pathname === '/api/keys') {
     if (req.method === 'GET') {
-      const safe = (config.tokens || []).map(t => ({
+      const keys = (config.keys || []).map(t => ({
         name: t.name,
-        token_masked: t.token ? t.token.substring(0, 10) + '...' + t.token.substring(t.token.length - 4) : '',
-        has_token: !!t.token,
+        key: t.key,
+        platformUser: t.platformUser || '',
       }));
-      writeJSON(res, 200, { keys: config.tokens || [], safe });
+      const safe = keys.map(t => ({
+        name: t.name,
+        key_masked: t.key ? t.key.substring(0, 10) + '...' + t.key.substring(t.key.length - 4) : '',
+        has_key: !!t.key,
+        platformUser: t.platformUser,
+      }));
+      writeJSON(res, 200, { keys, safe });
       return;
     }
     if (req.method === 'POST') {
@@ -1443,28 +1664,28 @@ async function handleRequest(req, res) {
         const body = await readBody(req);
         const data = JSON.parse(body);
         if (data.action === 'add') {
-          if (!config.tokens) config.tokens = [];
-          config.tokens.push({ name: data.name || `Key ${config.tokens.length + 1}`, token: data.token || '' });
-          if (!config.apiKey && data.token) config.apiKey = data.token;
+          if (!config.keys) config.keys = [];
+          config.keys.push({ name: data.name || `Key ${config.keys.length + 1}`, key: data.key || '', platformUser: data.platformUser || '' });
+          if (!config.apiKey && data.key) config.apiKey = data.key;
           saveConfig(config);
           setupOpencodeConfig();
-          writeJSON(res, 200, { success: true, keys: config.tokens });
+          writeJSON(res, 200, { success: true, keys: config.keys });
         } else if (data.action === 'update') {
-          if (typeof data.index !== 'number' || !config.tokens || !config.tokens[data.index]) { writeJSON(res, 404, { error: 'Key not found' }); return; }
-          if (data.name !== undefined) config.tokens[data.index].name = data.name;
-          if (data.token !== undefined) config.tokens[data.index].token = data.token;
-          if (data.index === 0 && config.tokens[0].token) config.apiKey = config.tokens[0].token;
+          if (typeof data.index !== 'number' || !config.keys || !config.keys[data.index]) { writeJSON(res, 404, { error: 'Key not found' }); return; }
+          if (data.name !== undefined) config.keys[data.index].name = data.name;
+          if (data.key !== undefined) config.keys[data.index].key = data.key;
+          if (data.platformUser !== undefined) config.keys[data.index].platformUser = data.platformUser;
+          if (data.index === 0 && config.keys[0].key) config.apiKey = config.keys[0].key;
           saveConfig(config);
           setupOpencodeConfig();
-          writeJSON(res, 200, { success: true, keys: config.tokens });
+          writeJSON(res, 200, { success: true, keys: config.keys });
         } else if (data.action === 'delete') {
-          if (typeof data.index !== 'number' || !config.tokens || !config.tokens[data.index]) { writeJSON(res, 404, { error: 'Key not found' }); return; }
-          config.tokens.splice(data.index, 1);
-          if (config.tokens.length === 0) config.tokens.push({ name: 'Key 1', token: '' });
-          if (data.index === 0) config.apiKey = config.tokens[0].token || '';
+          if (typeof data.index !== 'number' || !config.keys || !config.keys[data.index]) { writeJSON(res, 404, { error: 'Key not found' }); return; }
+          config.keys.splice(data.index, 1);
+          if (data.index === 0) config.apiKey = config.keys[0]?.key || '';
           saveConfig(config);
           setupOpencodeConfig();
-          writeJSON(res, 200, { success: true, keys: config.tokens });
+          writeJSON(res, 200, { success: true, keys: config.keys });
         } else {
           writeJSON(res, 400, { error: 'Unknown action' });
         }
@@ -1480,7 +1701,7 @@ async function handleRequest(req, res) {
 
   if (pathname === '/api/account') { await handleAccountInfo(req, res); return; }
 
-  if (pathname === '/api/step-plan-status') { await handleStepPlanStatus(req, res); return; }
+  if (pathname === '/api/get-plan-status') { await handleStepPlanStatus(req, res); return; }
 
   if (pathname === '/healthz') { await handleHealthz(req, res); return; }
   if (pathname === '/v1/models') { await handleModels(req, res); return; }
@@ -1561,32 +1782,37 @@ function remapModel(modelId) {
 function setupOpencodeConfig() {
   const enabled = config.enabledModels || AGNES_MODELS;
   const allModels = dynamicModels && dynamicModels.length > 0 ? dynamicModels : AGNES_MODELS;
-  const port = parseInt(config.listenAddr.split(':').pop()) || 8080;
+  const port = parseInt(config.listenAddr.split(':').pop()) || 8082;
+
+  const models = {};
+  const disabled = [];
+  for (const m of allModels) {
+    const meta = getModelMeta(m);
+    if (enabled.includes(m)) {
+      models[m] = meta;
+    } else {
+      disabled.push(m);
+    }
+  }
+  const providerEntry = {
+    npm: '@ai-sdk/openai-compatible',
+    name: 'Agnes2Opencode',
+    options: { baseURL: `http://localhost:${port}/v1` },
+    models,
+    blacklist: disabled
+  };
 
   const configPaths = [
     path.join(os.homedir(), '.config', 'opencode', 'opencode.json')
   ];
+  if (process.platform === 'win32') {
+    configPaths.unshift(path.join(os.homedir(), '.opencode', 'opencode.json'));
+    const systemProfile = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'config', 'systemprofile', '.opencode', 'opencode.json');
+    try { if (fs.existsSync(path.dirname(systemProfile))) configPaths.push(systemProfile); } catch {}
+  }
 
   for (const configFile of configPaths) {
     try {
-      const models = {};
-      const disabled = [];
-      for (const m of allModels) {
-        const meta = getModelMeta(m);
-        if (enabled.includes(m)) {
-          models[m] = meta;
-        } else {
-          disabled.push(m);
-        }
-      }
-      const providerEntry = {
-        npm: '@ai-sdk/openai-compatible',
-        name: 'Agnes2Opencode',
-        options: { baseURL: `http://localhost:${port}/v1` },
-        models,
-        blacklist: disabled
-      };
-
       const dir = path.dirname(configFile);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       let existing = { $schema: 'https://opencode.ai/config.json' };
@@ -1630,51 +1856,48 @@ async function startServer() {
   upstream = new UpstreamClient(config);
   const apiKeyValid = await validateApiKey();
 
-  // Restore per-token platform sessions on startup
-  if (config.tokens && config.tokens.length > 0) {
-    const tok = config.tokens[0];
-    if (tok.platformToken) {
-      platformSession = {
-        token: tok.platformToken,
-        user: tok.platformUser,
-        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-      };
-      console.log(`[Platform] Restored session for ${tok.platformUser?.email || 'unknown user'}, validating...`);
-      try {
-        await platformGetUserInfo();
-        console.log(`[Platform] Session valid`);
-      } catch (e) {
-        console.log(`[Platform] Session invalid (${e.message}), re-login...`);
-        platformSession = { token: null, user: null, expiresAt: 0 };
-        if (tok.platformUsername && tok.platformPassword) {
-          const lr = await loginToPlatform(tok.platformUsername, tok.platformPassword);
-          if (lr.success && config.tokens[0]) {
-            config.tokens[0].platformToken = lr.token;
-            config.tokens[0].platformUser = lr.user;
-            saveConfig(config);
-          }
-          console.log(`[Platform] Re-login ${lr.success ? 'successful' : 'failed: ' + lr.message}`);
+  // Restore platform sessions from platformUsers on startup
+  if (config.platformUsers && config.platformUsers.length > 0) {
+    let restored = false;
+    for (const pu of config.platformUsers) {
+      if (pu.token) {
+        platformSession = {
+          token: pu.token,
+          user: pu.user,
+          expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+        };
+        console.log(`[Platform] Restored session for ${pu.user?.email || pu.username}, validating...`);
+        try {
+          await platformGetUserInfo();
+          console.log(`[Platform] Session valid for ${pu.username}`);
+          restored = true;
+          break;
+        } catch (e) {
+          console.log(`[Platform] Session invalid for ${pu.username} (${e.message})`);
+          platformSession = { token: null, user: null, expiresAt: 0 };
         }
       }
-    } else if (tok.platformUsername && tok.platformPassword) {
-      console.log('[Platform] No saved session, logging in with configured credentials...');
-      const loginResult = await loginToPlatform(tok.platformUsername, tok.platformPassword);
-      if (loginResult.success) {
-        console.log(`[Platform] Auto-login successful for ${tok.platformUsername}`);
-        if (config.tokens[0]) {
-          config.tokens[0].platformToken = loginResult.token;
-          config.tokens[0].platformUser = loginResult.user;
-          saveConfig(config);
+    }
+    if (!restored) {
+      for (const pu of config.platformUsers) {
+        if (pu.password) {
+          console.log(`[Platform] No saved session for ${pu.username}, logging in...`);
+          const lr = await loginToPlatform(pu.username, pu.password);
+          if (lr.success) {
+            console.log(`[Platform] Auto-login successful for ${pu.username}`);
+            restored = true;
+            break;
+          } else {
+            console.error(`[Platform] Auto-login failed for ${pu.username}: ${lr.message}`);
+          }
         }
-      } else {
-        console.error(`[Platform] Auto-login failed: ${loginResult.message}`);
       }
     }
   }
 
   await fetchRemoteModels();
 
-  const port = parseInt(config.listenAddr.split(':').pop()) || 8080;
+  const port = parseInt(config.listenAddr.split(':').pop()) || 8082;
 
   function onListen() {
     console.log(`\nAgnes2Opencode on http://127.0.0.1:${port}`);

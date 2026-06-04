@@ -16,12 +16,13 @@ OpenAI-compatible proxy server for [Agnes AI](https://agnes-ai.com), providing a
 - **Tool Schema Normalization** — Resolves `$ref` and `$defs` in tool schemas before forwarding
 - **Dashboard UI** — Liquid glass effects, model/key management, real-time stats, plan status
 - **Platform Login** — Login with Agnes AI account credentials, session persistence, auto-login on restart
+- **Multi-Account Support** — Add multiple platform accounts, each with its own API key and credentials
 - **Auto-Config** — Automatically configures opencode provider on startup
 - **Dynamic Model Fetch** — Fetches available models from `https://apihub.agnes-ai.com/v1/models`
 - **Model Remapping** — Transparently translates legacy model IDs (`sapiens-ai/agnes-1.5-pro` → `agnes-2.0-flash`)
 - **Response Caching** — LRU cache for non-streaming responses (configurable TTL and max size)
 - **Multi-Key Support** — Rotate between multiple Agnes AI API keys with fingerprint-based sticky sessions
-- **AI Wallpaper** — Generate AI backgrounds via `agnes-image-2.1-flash`, preloaded to disk for instant display
+- **AI Wallpaper** — Generate AI backgrounds via `agnes-image-2.1-flash` using any API token, auto-enabled when a key is saved
 - **Plan Status** — View subscription status, usage windows, and billing info from the dashboard
 - **Retry Logic** — Automatic retry with exponential backoff for transient errors (model unavailable, query engine)
 - **Test Mode** — Mock responses for development without consuming API credits
@@ -46,8 +47,8 @@ Models are dynamically fetched from `https://apihub.agnes-ai.com/v1/models` on s
 - **Indefinitely Free:**
   The proprietary baseline models — such as Agnes-2.0-Flash — are free to use without a time trial or credit card.
 
-- **Dynamic Rate Limits:**
-  Rather than giving you a hard monthly number (like 1 million tokens), the platform throttles requests based on real-time server load. During peak hours, your generation speeds may slow down or briefly pause to prioritize paid developer traffic.
+- **Rate Limits:**
+  Free tier: 20 req/min. Paid plans have a 5-hour request limit: Starter: 1,500 / 5h | Plus: 7,500 / 5h | Pro: 30,000 / 5h
 
 Consider subscribing to keep the service up and available for everyone if you like it. [View Plans & Pricing](https://platform.agnes-ai.com/subscribe/subscription?from=website)
 
@@ -197,9 +198,11 @@ Access at `http://localhost:8080`:
 - **SS Mode** — Blur sensitive tokens for screenshots
 - **Liquid Glass Effects** — Canvas-generated SVG displacement maps with refraction profiles
 - **Model Management** — Toggle models on/off with capability badges (reasoning, tools, vision, context)
-- **Key Manager** — Add/edit/delete API keys with inline editing, platform account info display
-- **Platform Login** — Login with Agnes AI account, view account info, logout
-- **Wallpaper Toggle** — Switch between None, Bing, and AI Image modes with configurable prompt
+- **API Key Manager** — Add/edit/delete API keys with inline editing, platform account info display
+- **Platform Login** — Login with Agnes AI account, add multiple accounts, view account info, logout
+- **Retrieve Keys from Platform** — Fetch API keys from logged-in platform account, select and apply with auto-fill
+- **Apply API Key Modal** — Post-login modal that fetches platform keys, shows previews, fetches full key on selection
+- **Wallpaper Toggle** — Switch between None, Bing, and AI Image modes with configurable prompt (auto-enables AI on key save)
 - **Collapsible Sections** — Models, API Key, Quick Actions, Environment, Proxy Configuration
 - **Auto-refresh** — Health check every 15s, plan status every 30s
 
@@ -222,12 +225,14 @@ Access at `http://localhost:8080`:
 | `GET` | `/api/models` | List available model IDs with metadata |
 | `GET` | `/api/bg` | Wallpaper image (Bing daily, AI-generated, or 204 none) |
 | `POST` | `/api/generate-image` | Generate AI wallpaper, save to `.cache/ai-paper.jpg` |
-| `GET` / `POST` | `/api/keys` | Multi-key CRUD (add/update/delete) |
+| `GET` / `POST` | `/api/keys` | Multi-key CRUD (add/update/delete, includes `platformUsername`) |
 | `GET` | `/api/account` | Platform user data (`{ logged_in, user }`) |
 | `GET` | `/api/step-plan-status` | Subscription plan status with usage windows |
 | `POST` | `/api/login` | Platform login with `{ username, password }` |
 | `POST` | `/api/logout` | Clear platform session and saved credentials |
 | `GET` | `/api/platform/user` | Platform user info (requires login) |
+| `GET` | `/api/platform/keys` | Fetch API keys from platform (`GET /api/token`) with plan name and username |
+| `GET` | `/api/platform/token/:id/key` | Fetch full API key value from platform (`POST /api/token/:id/key`) |
 | `GET` / `DELETE` | `/api/cache` | View/clear response cache |
 
 ## Architecture
@@ -242,6 +247,9 @@ proxy.js
 ├── Platform Login        — Login/session management for platform account
 │   ├── loginToPlatform() — POST /api/user/login (15s timeout, persists to config)
 │   ├── platformGetUserInfo() — GET /api/user/self
+│   ├── platformGetUserKeys() — GET /api/token (list platform API keys)
+│   ├── platformGetTokenKey(id) — POST /api/token/:id/key (fetch full key value)
+│   ├── platformGetSubscriptionPlanName() — GET /api/user/subscription (plan name)
 │   └── platformSession   — Token + user + expiry state
 ├── Model Registry        — Fallback models, dynamic fetch (5min TTL), legacy remapping
 ├── Tool Schema Norm.     — $ref resolution, nullable simplification, type normalization
@@ -257,8 +265,11 @@ dashboard.html
 ├── Liquid Glass Engine   — Canvas-based displacement/specular maps with refraction profiles
 ├── Plan Fieldset         — Subscription status, usage bars, login CTA
 ├── Model Management      — Toggle models on/off with capability badges
-├── Key Manager           — Add/edit/delete API keys + account info
-├── Platform Login Modal  — Username/password login with status
+├── API Key Manager       — Add/edit/delete API keys + platform account info
+├── Platform Login Modal  — Username/password login, add-account mode, Enter key support
+├── Apply API Key Modal   — Post-login key selector with previews, full key auto-fetch
+├── Retrieve Keys Button  — Fetch platform keys from logged-in account
+├── Add Account Button    — Add multiple platform accounts
 ├── Wallpaper Toggle      — None / Bing / AI Image radio group + prompt input
 ├── Cache Stats           — Real-time cache performance
 ├── Auto-refresh          — Health (15s) + plan status (30s) polling

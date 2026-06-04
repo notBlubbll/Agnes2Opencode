@@ -27,7 +27,8 @@ AGNES-PROXY/
 - `API_KEY_ENV_VAR` — `AGNES_API_KEY`
 - `loadConfig()` — Loads `.config/config.json` with env var overrides; normalizes `TOKENS` array with per-token fields (`name`, `token`, `email`, `platformUsername`, `platformPassword`, `platformToken`, `platformUser`)
 - `saveConfig()` — Writes config back to `.config/config.json` (serializes `TOKENS`, `ENABLED_MODELS`, cache settings, etc.)
-- `generateAiWallpaperToDisk()` — Generates AI image via `/v1/images/generations` with model `agnes-image-2.1-flash`, saves to `.cache/ai-paper.jpg` (supports both URL-based and base64-encoded responses)
+- `generateAiWallpaperToDisk()` — Generates AI image via `/v1/images/generations` with model `agnes-image-2.1-flash`, saves to `.cache/ai-paper.jpg` (supports both URL-based and base64-encoded responses). Uses the first available token's API key (no subscription check — works with all plans including free). Disabled when no token is configured.
+- `hasApiToken()` — Returns `true` if any token in config has a non-empty `token` field (used as gate for wallpaper generation)
 - `parseDuration()` — Parses duration strings like `15m`, `6h`, `30s`
 
 ### 2. UpstreamClient
@@ -44,9 +45,13 @@ AGNES-PROXY/
 - `loginToPlatform(username, password)` — `POST ${PLATFORM_BASE_URL}/api/user/login` with 15s timeout; persists credentials back to first token for auto-login on restart
 - `getPlatformHeaders()` — Returns `{ Cookie, Authorization }` for platform API calls
 - `platformGetUserInfo()` — `GET ${PLATFORM_BASE_URL}/api/user/self` to fetch current user data
+- `platformGetUserKeys()` — `GET ${PLATFORM_BASE_URL}/api/token` to list platform API keys (returns previews only)
+- `platformGetTokenKey(tokenId)` — `POST ${PLATFORM_BASE_URL}/api/token/${tokenId}/key` to fetch full API key value
+- `platformGetSubscriptionPlanName()` — `GET ${PLATFORM_BASE_URL}/api/user/subscription` to get plan name (falls back to "Default")
 - `platformSession` — Module-level state: `{ token, user, expiresAt }`
 - Platform credentials (`platformUsername`, `platformPassword`, `platformToken`, `platformUser`) are stored per-token in the `TOKENS` array
 - Auto-login on startup: restores saved token from first token's `platformToken` OR logs in with first token's `platformUsername`/`platformPassword` if no token exists; validates session via `platformGetUserInfo()`
+- Multi-account support: `savePlatformLogin()` supports `addAccount` mode which creates new token entries or updates existing ones
 
 ### 4. Model Registry
 
@@ -116,17 +121,19 @@ AGNES-PROXY/
 
 Routes by pathname:
 - `/` or `/dashboard` → Serve `dashboard.html` with no-cache headers
-- `/api/config` (GET/POST) — Config read/write (masks tokens, reads/writes per-token platform credentials)
+- `/api/config` (GET/POST) — Config read/write (masks tokens, reads/writes per-token platform credentials; syncs `config.apiKey`/`upstream.apiKey` when tokens change)
 - `/api/validate` (GET) → Validate API key
 - `/api/models` (GET) → Model list with metadata (`models`, `allModels`, `meta`)
 - `/api/bg` (GET) → Wallpaper endpoint: Bing daily (cached per day), AI-generated (`ai-paper.jpg` with lazy regeneration), or 204 (none)
 - `/api/generate-image` (POST) → Generate AI wallpaper, save to `.cache/ai-paper.jpg`
-- `/api/keys` (GET/POST) — Multi-key CRUD (add/update/delete with `{name, token}`)
+- `/api/keys` (GET/POST) — Multi-key CRUD (add/update/delete with `{name, token, platformUsername}`)
 - `/api/account` (GET) → Platform user data (`{ logged_in, user }`)
 - `/api/step-plan-status` (GET) → Subscription plan status with usage windows
 - `/api/login` (POST) → Platform login with `{ username, password }`
 - `/api/logout` (POST) → Clear platform session, save config
 - `/api/platform/user` (GET) → Platform user info (requires login)
+- `/api/platform/keys` (GET) → Fetch API keys from platform (`GET /api/token`) with plan name and username
+- `/api/platform/token/:id/key` (GET) → Fetch full API key value from platform (`POST /api/token/:id/key`)
 - `/api/cache` (GET/DELETE) → Cache stats/clear
 - `/healthz` → Health check with full status dump
 - `/v1/models` → OpenAI models
@@ -158,12 +165,15 @@ Routes by pathname:
 - **Liquid Glass Engine** — Canvas-generated displacement maps with refraction profiles (`calculateRefractionProfile()`, `generateDisplacementMap()`, `generateSpecularMap()`)
 - **SVG Filter Pipeline** — `feGaussianBlur` → `feImage` (displacement) → `feDisplacementMap` → `feColorMatrix` (saturation) → `feComposite` → `feBlend`
 - **Plan Fieldset** — Subscription name, expiry countdown, 5-hour usage bar, weekly usage bar; shows "No Plan" card with login/subscribe CTA
-- **Key Manager Modal** — Inline add/edit/delete for multiple API keys + platform account info display
-- **Platform Login Modal** — Username/password login with status feedback
+- **API Key Manager Modal** — Inline add/edit/delete for multiple API keys + platform account info display; "Retrieve Tokens from Platform" and "Add Platform Account" buttons
+- **Platform Login Modal** — Username/password login with status feedback, supports 'addAccount' mode for multiple accounts, Enter key support
+- **Apply API Key Modal** — Post-login modal that fetches platform keys from `GET /api/token`, shows previews in dropdown, fetches full key from `POST /api/token/:id/key` on selection
+- **`sanitizeKeyName(planName, userName)`** — Formats token name as `PlanName(username)` with dots removed, "free" stripped, thinspace for spaces
+- **`retrievePlatformKeys()`** — Checks platform login, then opens apply key modal
 - **Model Tags** — Toggle models on/off with capability badges (reasoning, tools, vision, context size)
 - **SS Mode** — `token-blurred` CSS class (blur on hover)
 - **Bing Wallpaper** — Daily rotating background with toggle
-- **AI Wallpaper** — Generated via Agnes AI image model, preloaded to disk for instant display
+- **AI Wallpaper** — Generated via Agnes AI image model, auto-enabled when a key is saved
 - **Auto-refresh** — Health check every 15s, plan status every 30s
 - **Collapsible Sections** — Models, API Key, Quick Actions, Environment, Proxy Configuration
 - **Configuration Forms** — Listen address, upstream URL, timeout, test mode toggle, wallpaper mode selector with prompt input
@@ -257,6 +267,10 @@ curl -X POST http://localhost:8080/api/login \
 
 # Test platform logout
 curl -X POST http://localhost:8080/api/logout
+
+# Test platform keys
+curl http://localhost:8080/api/platform/keys
+curl http://localhost:8080/api/platform/token/12345/key
 
 # Test chat completion
 curl -X POST http://localhost:8080/v1/chat/completions \

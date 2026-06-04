@@ -88,6 +88,8 @@
     .status-online { background-color: var(--success-color); box-shadow: 0 0 10px var(--success-color); }
     .status-offline { background-color: var(--danger-color); box-shadow: 0 0 10px var(--danger-color); }
     .status-unknown { background-color: var(--secondary-color); }
+    .status-checking { background-color: var(--warning-color); box-shadow: 0 0 10px var(--warning-color); animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     .token-blurred {
       filter: blur(5px);
       transition: filter 0.2s ease;
@@ -487,7 +489,7 @@
       <div id="planSlideshow" style="position:relative;min-height:120px">
         <div class="plan-slide active" id="planSlide0">
           <div class="row text-center align-items-stretch">
-            <div class="col-4">
+            <div class="col-4" id="planColumn">
               <div class="stats-card card h-100 d-flex flex-column" data-glass>
                 <div class="card-content flex-grow-1 justify-content-center align-items-center d-flex flex-column" style="padding:8px">
                   <div class="stats-value" id="planName" title="Loading...">Loading...</div>
@@ -496,7 +498,7 @@
                 </div>
               </div>
             </div>
-            <div class="col-4">
+            <div class="col-4" id="fiveHourColumn">
               <div class="stats-card card h-100 d-flex flex-column" data-glass>
                 <div class="card-content flex-grow-1 justify-content-center d-flex flex-column" style="padding:8px">
                   <div class="usage-display">
@@ -511,7 +513,7 @@
                 </div>
               </div>
             </div>
-            <div class="col-4">
+            <div class="col-4" id="weeklyColumn">
               <div class="stats-card card h-100 d-flex flex-column" data-glass>
                 <div class="card-content flex-grow-1 justify-content-center d-flex flex-column" style="padding:8px">
                   <div class="usage-display">
@@ -643,7 +645,7 @@
                 <div class="row">
                   <div class="col-6 mb-2">
                     <label class="form-label" style="font-size:10px;margin-bottom:2px">Listen Address</label>
-                    <input type="text" class="form-control form-control-sm" id="listenAddr" value=":8080">
+                    <input type="text" class="form-control form-control-sm" id="listenAddr" value=":8082">
                   </div>
                   <div class="col-6 mb-2">
                     <label class="form-label" style="font-size:10px;margin-bottom:2px">Timeout</label>
@@ -671,17 +673,23 @@
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content" style="background:#1a1d23;color:white;border:1px solid rgba(255,255,255,0.1)">
         <div class="modal-header border-bottom-0">
-          <h5 class="modal-title"><i class="bi bi-key-fill me-2"></i>Manage Keys</h5>
+          <h5 class="modal-title"><i class="bi bi-key-fill me-2"></i>Manage API Keys</h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body" id="keysModalBody">
           <div id="keysList"></div>
           <hr style="border-color:rgba(255,255,255,0.1)">
           <div class="mb-3">
-            <label class="form-label">Add New Key</label>
+            <label class="form-label">Add New API Key</label>
             <input type="text" class="form-control form-control-sm mb-2" id="newKeyName" placeholder="Key name (e.g. Key 2)">
-            <input type="text" class="form-control form-control-sm mb-2" id="newKeyToken" placeholder="API token">
+            <input type="text" class="form-control form-control-sm mb-2" id="newKey" placeholder="API key value">
             <button class="btn btn-success btn-sm w-100" onclick="addKey()"><i class="bi bi-plus-circle me-1"></i>Add Key</button>
+          </div>
+          <div class="mb-3">
+            <button class="btn btn-outline-action btn-sm w-100" onclick="retrievePlatformKeys()"><i class="bi bi-cloud-download me-1"></i>Retrieve Tokens from Platform</button>
+          </div>
+          <div class="mb-3">
+            <button class="btn btn-outline-action btn-sm w-100" onclick="bootstrap.Modal.getInstance(document.getElementById('keysModal'))?.hide();setTimeout(()=>openPlatformLoginModal('addAccount'),300)"><i class="bi bi-person-plus me-1"></i>Add Platform Account</button>
           </div>
         </div>
         <div class="modal-footer border-top-0">
@@ -718,10 +726,42 @@
     </div>
   </div>
 
+  <!-- Apply Platform Key Modal -->
+  <div class="modal fade" id="applyKeyModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="background:#1a1d23;color:white;border:1px solid rgba(255,255,255,0.1)">
+        <div class="modal-header border-bottom-0">
+          <h5 class="modal-title"><i class="bi bi-key-fill me-2"></i>Apply API Key</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted mb-3" style="font-size:12px" id="applyKeySubtitle">Select an API key from your account to apply.</p>
+          <div id="applyKeyContent">
+            <div class="text-center py-3">
+              <div class="spinner-border spinner-border-sm text-light" role="status"></div>
+              <div class="mt-2 text-muted" style="font-size:12px">Loading keys...</div>
+            </div>
+          </div>
+          <div id="applyKeyStatus" style="display:none" class="mb-2 mt-2"></div>
+        </div>
+        <div class="modal-footer border-top-0">
+          <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Skip</button>
+          <button class="btn btn-success btn-sm" id="applyKeyConfirmBtn" onclick="applySelectedPlatformKey()"><i class="bi bi-check-circle me-1"></i>Apply Selected</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-container" id="toastContainer"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && document.getElementById('platformLoginModal')?.classList.contains('show')) {
+        e.preventDefault();
+        savePlatformLogin();
+      }
+    });
     console.log('[Glass] Script loaded');
     const SURFACE_FNS = {
       convex_squircle: (x) => Math.pow(1 - Math.pow(1 - x, 4), 0.25),
@@ -894,6 +934,82 @@
       setTimeout(() => toast.remove(), 3000);
     }
 
+    async function syncAiWallpaperWithKeys() {
+      try {
+        const r = await fetch('/api/keys');
+        const d = await r.json();
+        const realKeys = (d.keys || []).filter(k => k.key);
+        hasImageGen = realKeys.length > 0;
+        updateAiWallpaperButton();
+        const aiRadio = document.getElementById('wp-ai');
+        const bingRadio = document.getElementById('wp-bing');
+        if (aiRadio?.checked && !hasImageGen) {
+          aiRadio.checked = false;
+          if (bingRadio) bingRadio.checked = true;
+          applyWallpaper('bing');
+          await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallpaperMode: 'bing' }),
+          }).catch(() => {});
+        }
+        const enabledResp = await fetch('/api/config');
+        const enabledData = await enabledResp.json();
+        renderModels(enabledData.enabledModels || enabledData.ENABLED_MODELS);
+        renderTokenPools();
+      } catch (e) {}
+    }
+
+    async function probeApiKey(silent = false) {
+      try {
+        const keysResp = await fetch('/api/keys');
+        const kd = await keysResp.json();
+        const realKeys = (kd.keys || []).filter(k => k.key);
+        if (realKeys.length === 0) return false;
+        markKeyStatus('Checking…', 'status-checking');
+        const r = await fetch('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'agnes-2.0-flash',
+            messages: [{ role: 'user', content: 'say hi' }],
+            max_tokens: 1,
+            stream: false,
+          }),
+        });
+        if (r.ok) {
+          markKeyActive();
+          if (!silent) showToast('API key validated', 'success');
+          return true;
+        }
+        markKeyStatus('Inactive', 'status-offline');
+        if (!silent) showToast('API key probe failed', 'danger');
+        return false;
+      } catch (e) {
+        markKeyStatus('Inactive', 'status-offline');
+        if (!silent) showToast('API key probe error', 'danger');
+        return false;
+      }
+    }
+
+    function markKeyStatus(text, cssClass) {
+      const pools = document.querySelectorAll('#tokenPoolsContainer .pool-card');
+      pools.forEach(card => {
+        const statusEl = card.querySelector('.pool-status');
+        if (!statusEl) return;
+        statusEl.classList.remove('status-online', 'status-offline', 'status-checking');
+        if (cssClass) statusEl.classList.add(cssClass);
+        statusEl.textContent = text;
+      });
+    }
+
+    function markKeyActive() {
+      markKeyStatus('Active', 'status-online');
+      if (proxyData && Array.isArray(proxyData.token_state)) {
+        proxyData.token_state.forEach(t => { if (t.status !== 'active') t.status = 'active'; });
+      }
+    }
+
     function updateAiWallpaperButton() {
       const aiRadio = document.getElementById('wp-ai');
       const aiLabel = document.querySelector('label[for="wp-ai"]');
@@ -903,7 +1019,7 @@
         aiLabel.style.opacity = hasImageGen ? '1' : '0.4';
         aiLabel.style.cursor = hasImageGen ? '' : 'not-allowed';
         aiLabel.style.pointerEvents = 'auto';
-        aiLabel.title = hasImageGen ? '' : 'Requires Plus Plan or above';
+        aiLabel.title = hasImageGen ? '' : 'Requires an API key';
       }
       const currentMode = document.querySelector('input[name="wallpaper"]:checked')?.value;
       if (currentMode === 'ai' && !hasImageGen) {
@@ -941,7 +1057,7 @@
         const configData = await configResponse.json();
         if (configData) {
           config = configData;
-          if (document.getElementById('listenAddr')) document.getElementById('listenAddr').value = configData.listenAddr || ':8080';
+          if (document.getElementById('listenAddr')) document.getElementById('listenAddr').value = configData.listenAddr || ':8082';
           if (document.getElementById('upstreamUrl')) document.getElementById('upstreamUrl').value = configData.upstreamBaseURL || 'https://agnes-ai.com/api';
           if (document.getElementById('requestTimeout')) document.getElementById('requestTimeout').value = configData.requestTimeout || '15m';
           const mode = configData.wallpaperMode || 'bing';
@@ -986,55 +1102,73 @@
 
     function renderKeysList(keys) {
       const container = document.getElementById('keysList');
-      if (!keys || keys.length === 0) {
-        container.innerHTML = '<p class="text-muted text-center py-3">No keys configured</p>';
+      const blurClass = blurTokensEnabled ? 'token-blurred' : '';
+      const platformUsers = accountData?.platform_users || [];
+      let usersHtml = '';
+      if (platformUsers.length > 0) {
+        usersHtml = platformUsers.map(u => {
+          const loggedInUser = accountData?.logged_in && (accountData.user?.username === u.username || accountData.user?.email === u.email);
+          const statusColor = u.is_active ? '#32CD32' : '#dc3545';
+          const statusText = u.is_active ? 'Active' : 'Inactive';
+          return `<div class="mb-2 p-2" style="background:rgba(255,255,255,0.05);border-radius:8px;border:1px solid rgba(255,255,255,0.1);font-size:0.8rem">
+            <div class="d-flex justify-content-between align-items-center" style="margin-bottom:4px">
+              <span style="color:rgba(255,255,255,0.5)"><i class="bi bi-person-circle me-1"></i>Platform Account</span>
+              <div>
+                ${u.logged_in ? `<span style="color:#32CD32;font-size:0.7rem;margin-right:8px"><i class="bi bi-check-circle-fill"></i> Online</span>`: `<span style="color:rgba(255,255,255,0.3);font-size:0.7rem;margin-right:8px"><i class="bi bi-x-circle"></i></span>`}
+                <button class="btn btn-sm" style="background:rgba(220,53,69,0.2);color:#dc3545;border:none;font-size:0.7rem;padding:2px 8px" onclick="removePlatformUser('${escapeHtml(u.username)}')"><i class="bi bi-box-arrow-right me-1"></i>Logout &amp; Remove</button>
+              </div>
+            </div>
+            <div>User: <span class="${blurClass}">${escapeHtml(u.username || u.email || '-')}</span></div>
+            <div>Email: <span>${escapeHtml(u.email || '-')}</span></div>
+            <div>Status: <span style="color:${statusColor}">${statusText}</span></div>
+            ${u.last_login ? `<div>Last login: <span>${escapeHtml(u.last_login)}</span></div>` : ''}
+          </div>`;
+        }).join('');
+      } else {
+        usersHtml = `<div class="mb-2 p-2" style="background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.08);font-size:0.8rem">
+          <div class="d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-person me-1"></i>No platform accounts</span><button class="btn btn-sm" style="background:rgba(40,167,69,0.2);color:#28a745;border:none;font-size:0.7rem;padding:2px 8px" onclick="bootstrap.Modal.getInstance(document.getElementById('keysModal'))?.hide();setTimeout(openPlatformLoginModal,300)"><i class="bi bi-box-arrow-in-right me-1"></i>Login</button></div>
+        </div>`;
+      }
+      const realKeys = keys.filter(k => k.key);
+      if (!realKeys.length) {
+        container.innerHTML = usersHtml + '<p class="text-muted text-center py-3">No API keys configured.</p>';
         return;
       }
-      const blurClass = blurTokensEnabled ? 'token-blurred' : '';
-      const acctHtml = accountData && accountData.logged_in ? `<div class="mb-2 p-2" style="background:rgba(255,255,255,0.05);border-radius:8px;border:1px solid rgba(255,255,255,0.1);font-size:0.8rem">
-        <div class="d-flex justify-content-between align-items-center" style="margin-bottom:4px"><span style="color:rgba(255,255,255,0.5)"><i class="bi bi-person-circle me-1"></i>Platform Account</span><button class="btn btn-sm" style="background:rgba(220,53,69,0.2);color:#dc3545;border:none;font-size:0.7rem;padding:2px 8px" onclick="platformLogout()"><i class="bi bi-box-arrow-right me-1"></i>Logout</button></div>
-        <div>User: <span class="${blurClass}">${escapeHtml(accountData.user?.username || accountData.user?.email || '-')}</span></div>
-        <div>Email: <span>${escapeHtml(accountData.user?.email || '-')}</span></div>
-        <div>Status: <span style="color:${accountData.user?.is_active ? '#32CD32' : '#dc3545'}">${accountData.user?.is_active ? 'Active' : 'Inactive'}</span></div>
-        ${accountData.user?.created_at ? `<div>Joined: <span>${escapeHtml(accountData.user.created_at)}</span></div>` : ''}
-        ${accountData.user?.last_login ? `<div>Last login: <span>${escapeHtml(accountData.user.last_login)}</span></div>` : ''}
-      </div>` : `<div class="mb-2 p-2" style="background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.08);font-size:0.8rem">
-        <div class="d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-person me-1"></i>No platform account logged in</span><button class="btn btn-sm" style="background:rgba(40,167,69,0.2);color:#28a745;border:none;font-size:0.7rem;padding:2px 8px" onclick="bootstrap.Modal.getInstance(document.getElementById('keysModal'))?.hide();setTimeout(openPlatformLoginModal,300)"><i class="bi bi-box-arrow-in-right me-1"></i>Login</button></div>
-      </div>`;
-      container.innerHTML = acctHtml + keys.map((k, i) => {
-        if (editingIndex === i) {
+      container.innerHTML = usersHtml + realKeys.map((k, i) => {
+        const origIdx = keys.indexOf(k);
+        if (editingIndex === origIdx) {
           return `<div class="pool-card">
             <div class="mb-2">
               <label class="form-label" style="font-size:10px">Name</label>
               <input type="text" class="form-control form-control-sm" id="editKeyName" value="${escapeHtml(k.name || '')}">
             </div>
             <div class="mb-2">
-              <label class="form-label" style="font-size:10px">Token</label>
-              <input type="text" class="form-control form-control-sm" id="editKeyToken" value="${escapeHtml(k.token || '')}">
+              <label class="form-label" style="font-size:10px">Key</label>
+              <input type="text" class="form-control form-control-sm" id="editKey" value="${escapeHtml(k.key || '')}">
             </div>
             <div class="d-flex gap-2">
-              <button class="btn btn-sm btn-success" onclick="saveEditKey(${i})"><i class="bi bi-check me-1"></i>Save</button>
+              <button class="btn btn-sm btn-success" onclick="saveEditKey(${origIdx})"><i class="bi bi-check me-1"></i>Save</button>
               <button class="btn btn-sm btn-secondary" onclick="cancelEditKey()"><i class="bi bi-x me-1"></i>Cancel</button>
             </div>
           </div>`;
         }
-        const maskedToken = k.token ? k.token.substring(0, 4) + '...' + k.token.substring(k.token.length - 4) : '';
-        const isDeleting = deleteIndex === i;
+        const maskedToken = k.key.substring(0, 4) + '...' + k.key.substring(k.key.length - 4);
+        const isDeleting = deleteIndex === origIdx;
         return `<div class="pool-card">
           <div class="pool-header">
             <div class="pool-name">${escapeHtml(k.name || 'Unnamed')}</div>
             <div>
-              <button class="btn btn-sm btn-outline-action me-1" onclick="startEditKey(${i})" title="Edit"><i class="bi bi-pencil"></i></button>
-              <button class="btn btn-sm" style="background:rgba(220,53,69,0.2);color:#dc3545;border:none" onclick="startDeleteKey(${i})" title="Delete"><i class="bi bi-trash"></i></button>
+              <button class="btn btn-sm btn-outline-action me-1" onclick="startEditKey(${origIdx})" title="Edit"><i class="bi bi-pencil"></i></button>
+              <button class="btn btn-sm" style="background:rgba(220,53,69,0.2);color:#dc3545;border:none" onclick="startDeleteKey(${origIdx})" title="Delete"><i class="bi bi-trash"></i></button>
             </div>
           </div>
           <div style="font-size:0.8rem;color:rgba(255,255,255,0.7)">
-            <div>Token: <span class="${blurClass}" title="${escapeHtml(k.token || '')}">${maskedToken || '(empty)'}</span></div>
-            <div>User: <span class="${blurClass}" title="${escapeHtml(config?.platformUsername || '')}">${config?.platformUsername || '(not logged in)'}</span></div>
+            <div>Key: <span class="${blurClass}" title="${escapeHtml(k.key)}">${maskedToken}</span></div>
+            <div>User: <span class="${blurClass}" title="${escapeHtml(k.platformUser || '')}">${k.platformUser || 'None'}</span></div>
           </div>
           ${isDeleting ? `<div class="mt-2 d-flex gap-2 align-items-center" style="font-size:0.85rem;color:#dc3545"><i class="bi bi-exclamation-triangle"></i> Delete this key?</div>
             <div class="d-flex gap-2 mt-1">
-              <button class="btn btn-sm" style="background:#dc3545;color:white;border:none" onclick="confirmDeleteKey(${i})"><i class="bi bi-trash me-1"></i>Delete</button>
+              <button class="btn btn-sm" style="background:#dc3545;color:white;border:none" onclick="confirmDeleteKey(${origIdx})"><i class="bi bi-trash me-1"></i>Delete</button>
               <button class="btn btn-sm btn-secondary" onclick="cancelDeleteKey()">Cancel</button>
             </div>` : ''}
         </div>`;
@@ -1043,18 +1177,20 @@
 
     async function addKey() {
       const name = document.getElementById('newKeyName').value.trim() || ('Key ' + (document.querySelectorAll('#keysList .pool-card').length + 1));
-      const token = document.getElementById('newKeyToken').value.trim();
-      if (!token) { showToast('Token is required', 'warning'); return; }
+      const key = document.getElementById('newKey').value.trim();
+      if (!key) { showToast('Key is required', 'warning'); return; }
+      const platformUser = (accountData?.platform_users && accountData.platform_users.length > 0)
+        ? (accountData.platform_users[0].username || '') : '';
       try {
         const r = await fetch('/api/keys', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'add', name, token })
+          body: JSON.stringify({ action: 'add', name, key, platformUser })
         });
         const data = await r.json();
         if (data.success) {
           document.getElementById('newKeyName').value = '';
-          document.getElementById('newKeyToken').value = '';
+          document.getElementById('newKey').value = '';
           renderKeysList(data.keys);
           showToast('Key added', 'success');
           loadConfiguration();
@@ -1083,12 +1219,12 @@
 
     async function saveEditKey(index) {
       const name = document.getElementById('editKeyName').value.trim();
-      const token = document.getElementById('editKeyToken').value.trim();
+      const key = document.getElementById('editKey').value.trim();
       try {
         const r = await fetch('/api/keys', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'update', index, name, token })
+          body: JSON.stringify({ action: 'update', index, name, key })
         });
         const data = await r.json();
         if (data.success) {
@@ -1125,7 +1261,7 @@
           deleteIndex = -1;
           renderKeysList(data.keys);
           showToast('Key deleted', 'success');
-          loadConfiguration();
+          loadConfiguration().then(() => syncAiWallpaperWithKeys());
         } else {
           showToast('Failed: ' + data.error, 'danger');
         }
@@ -1138,7 +1274,7 @@
         container.innerHTML = `
           <div class="text-center py-4">
             <i class="bi bi-key" style="font-size:2rem;color:rgba(255,255,255,0.4)"></i>
-            <p class="mt-2 text-muted">No tokens detected</p>
+            <p class="mt-2 text-muted">No API keys detected</p>
           </div>`;
         return;
       }
@@ -1148,15 +1284,25 @@
         const status = pool.status || 'none';
         const statusClass = status === 'active' ? 'status-online' : 'status-offline';
         const statusText = status.charAt(0).toUpperCase() + status.slice(1);
-        const maskedPoolToken = pool.token ? pool.token.substring(0, 4) + '...' + pool.token.substring(pool.token.length - 4) : '(empty)';
+        const maskedPoolToken = pool.key ? pool.key.substring(0, 4) + '...' + pool.key.substring(pool.key.length - 4) : '(empty)';
         const maskedPoolSession = pool.session ? pool.session.substring(0, 4) + '...' + pool.session.substring(pool.session.length - 4) : '';
         const sessInfo = pool.has_session ? `<div>Session: <span class="${blurClass}" title="${escapeHtml(pool.session || '')}">${maskedPoolSession}</span></div>` : '';
-        return `<div class="pool-card"><div class="pool-header"><div class="pool-name">${pool.name}</div><div class="pool-status ${statusClass}">${statusText}</div></div><div style="font-size:0.8rem;color:rgba(255,255,255,0.7)"><div>Token: <span class="${blurClass}" title="${escapeHtml(pool.token || '')}">${maskedPoolToken}</span></div>${sessInfo}</div></div>`;
+        return `<div class="pool-card"><div class="pool-header"><div class="pool-name">${pool.name}</div><div class="pool-status ${statusClass}">${statusText}</div></div><div style="font-size:0.8rem;color:rgba(255,255,255,0.7)"><div>Key: <span class="${blurClass}" title="${escapeHtml(pool.key || '')}">${maskedPoolToken}</span></div>${sessInfo}</div></div>`;
       }).join('');
     }
 
     function renderModels(enabledModels) {
       const container = document.getElementById('modelsContainer');
+      const hasRealKey = (config && Array.isArray(config.keys) && config.keys.some(k => k.key)) || hasImageGen;
+      if (!hasRealKey) {
+        document.getElementById('modelCountBadge').textContent = '0';
+        container.innerHTML = `
+          <div class="text-center py-4">
+            <i class="bi bi-key" style="font-size:2rem;color:rgba(255,255,255,0.4)"></i>
+            <p class="mt-2 text-muted">Add a key to see available models</p>
+          </div>`;
+        return;
+      }
       document.getElementById('modelCountBadge').textContent = models.length;
       if (models.length === 0) { container.innerHTML = '<p class="text-muted">No models available</p>'; return; }
       const enabledSet = new Set(enabledModels || models);
@@ -1265,12 +1411,14 @@
       document.body.style = '';
     }
 
-    function openPlatformLoginModal() {
+    function openPlatformLoginModal(mode) {
       hideAllModals();
-      const tok = config?.tokens?.[0];
-      document.getElementById('platLoginUsername').value = tok?.platformUsername || config?.platformUsername || '';
+      _loginMode = mode || 'login';
+      document.getElementById('platLoginUsername').value = '';
       document.getElementById('platLoginPassword').value = '';
       document.getElementById('platLoginStatus').style.display = 'none';
+      const title = document.querySelector('#platformLoginModal .modal-title');
+      if (title) title.innerHTML = _loginMode === 'addAccount' ? '<i class="bi bi-person-plus-fill me-2"></i>Add Platform Account' : '<i class="bi bi-person-fill me-2"></i>Platform Login';
       const platModalEl = document.getElementById('platformLoginModal');
       const existing = bootstrap.Modal.getInstance(platModalEl);
       if (existing) existing.show();
@@ -1283,19 +1431,8 @@
       const statusEl = document.getElementById('platLoginStatus');
       if (!username || !password) { statusEl.style.display = 'block'; statusEl.innerHTML = '<small class="text-danger">Username and password are required</small>'; return; }
       statusEl.style.display = 'block';
-      statusEl.innerHTML = '<small class="text-info">Saving and logging in...</small>';
+      statusEl.innerHTML = '<small class="text-info">Logging in...</small>';
       try {
-        // Get current tokens, inject platform credentials into first token, save via config endpoint
-        const tokensResp = await fetch('/api/keys');
-        const keysData = await tokensResp.json();
-        const keys = keysData.keys || [];
-        if (keys.length > 0) {
-          keys[0].platformUsername = username;
-          keys[0].platformPassword = password;
-        }
-        const cfgResp = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tokens: keys }) });
-        const cfgData = await cfgResp.json();
-        if (!cfgData.success) { statusEl.innerHTML = '<small class="text-danger">Failed to save: ' + (cfgData.error || 'unknown') + '</small>'; return; }
         const loginResp = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
         const loginData = await loginResp.json();
         if (loginData.success) {
@@ -1305,8 +1442,8 @@
             hideAllModals();
             checkHealth(true);
             fetchStepPlanStatus();
-            openKeysModal();
-          }, 1200);
+            openApplyKeyModal();
+          }, 800);
         } else {
           const errMsg = loginData.error || 'unknown';
           statusEl.innerHTML = '<small class="text-danger">Login failed: ' + errMsg + '</small>';
@@ -1318,6 +1455,186 @@
       }
     }
 
+    let _applyKeyCache = [];
+    let _applyKeyPlanName = 'Default';
+    let _applyKeyUsername = '';
+    let _loginMode = 'login';
+
+    function sanitizeKeyName(planName, userName) {
+      let p = (planName || 'Default').replace(/\./g, '').replace(/\s*free\s*/gi, '').trim().replace(/ /g, '\u2009') || 'Default';
+      let u = (userName || '').replace(/\./g, '').replace(/ /g, '\u2009');
+      return u ? p + '(' + u + ')' : p;
+    }
+
+    async function openApplyKeyModal() {
+      hideAllModals();
+      const content = document.getElementById('applyKeyContent');
+      const statusEl = document.getElementById('applyKeyStatus');
+      const subtitle = document.getElementById('applyKeySubtitle');
+      const confirmBtn = document.getElementById('applyKeyConfirmBtn');
+      statusEl.style.display = 'none';
+      confirmBtn.disabled = true;
+      content.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-light" role="status"></div><div class="mt-2 text-muted" style="font-size:12px">Loading keys from platform...</div></div>';
+      subtitle.textContent = 'Select an API key from your account to apply.';
+      const modalEl = document.getElementById('applyKeyModal');
+      const existing = bootstrap.Modal.getInstance(modalEl);
+      if (existing) existing.show();
+      else new bootstrap.Modal(modalEl).show();
+      try {
+        const resp = await fetch('/api/platform/keys');
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed to load keys');
+        const keys = data.keys || [];
+        _applyKeyCache = keys;
+        _applyKeyPlanName = data.plan_name || 'Default';
+        _applyKeyUsername = data.username || '';
+        if (keys.length === 0) {
+          content.innerHTML = '<div class="text-muted text-center py-3" style="font-size:12px">No keys found on your account.</div>';
+          return;
+        }
+        const optionsHtml = keys.map((k, i) => {
+          const planLabel = (k.plan_name && k.plan_name.trim()) ? k.plan_name : 'Default';
+          const displayName = sanitizeKeyName(k.plan_name || planLabel, data.username || _applyKeyUsername);
+          const preview = k.preview || (k.full_key ? k.full_key.substring(0, 8) + '…' : '—');
+          const statusDot = k.status === 'active'
+            ? '<span class="badge ms-2" style="background:rgba(40,167,69,0.25);color:#28a745;font-size:9px;padding:2px 6px">Active</span>'
+            : (k.status ? `<span class="badge bg-secondary ms-2" style="font-size:9px;padding:2px 6px">${escapeHtml(k.status)}</span>` : '');
+          return `<option value="${i}">${escapeHtml(displayName)} — ${escapeHtml(preview)}${statusDot}</option>`;
+        }).join('');
+        const firstKey = keys[0];
+        content.innerHTML = `
+          <div class="mb-2">
+            <label class="form-label" style="font-size:12px">Available Keys</label>
+            <select class="form-select form-select-sm" id="applyKeySelect" onchange="onApplyKeySelectChange()">
+              ${optionsHtml}
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label" style="font-size:12px">Key Value</label>
+            <input type="text" class="form-control form-control-sm" id="applyKeyValue" value="" readonly placeholder="fetching..." data-last-idx="0">
+          </div>
+          <small class="text-muted d-block mb-1" style="font-size:10px">Saved as: <span id="applyKeyPreview" style="color:rgba(255,255,255,0.8)">${escapeHtml(sanitizeKeyName(firstKey.plan_name || 'Default', data.username || _applyKeyUsername))}</span></small>
+          <small class="d-block mb-1" style="font-size:10px;color:rgba(255,255,255,0.5)" id="applyKeyHint">Fetching full key...</small>
+        `;
+        confirmBtn.disabled = false;
+        setTimeout(() => {
+          const sel = document.getElementById('applyKeySelect');
+          if (sel) { sel.size = Math.min(Math.max(sel.options.length, 3), 6); sel.focus(); }
+          onApplyKeySelectChange();
+        }, 50);
+      } catch (e) {
+        content.innerHTML = `<div class="text-danger text-center py-3" style="font-size:12px">${escapeHtml(e.message)}</div>`;
+        confirmBtn.disabled = true;
+      }
+    }
+
+    async function onApplyKeySelectChange() {
+      const select = document.getElementById('applyKeySelect');
+      const idx = parseInt(select.value);
+      const key = _applyKeyCache[idx];
+      if (!key) return;
+      const valueInput = document.getElementById('applyKeyValue');
+      const preview = document.getElementById('applyKeyPreview');
+      const hint = document.getElementById('applyKeyHint');
+      const confirmBtn = document.getElementById('applyKeyConfirmBtn');
+      const proposed = sanitizeKeyName(key.plan_name || 'Default', _applyKeyUsername);
+      preview.textContent = proposed;
+      hint.textContent = 'Fetching key...';
+      hint.style.color = 'rgba(255,255,255,0.5)';
+      valueInput.value = '';
+      confirmBtn.disabled = true;
+      valueInput.dataset.lastIdx = String(idx);
+      try {
+        const r = await fetch('/api/platform/token/' + encodeURIComponent(key.id) + '/key');
+        const d = await r.json();
+        if (d.key) {
+          valueInput.value = d.key;
+          hint.textContent = 'Key loaded.';
+          hint.style.color = '#28a745';
+        } else {
+          hint.textContent = d.error || 'No key returned — paste it below.';
+          hint.style.color = '#dc3545';
+        }
+      } catch (e) {
+        hint.textContent = 'Fetch failed — paste it below.';
+        hint.style.color = '#dc3545';
+      }
+      confirmBtn.disabled = false;
+    }
+
+    async function applySelectedPlatformKey() {
+      const select = document.getElementById('applyKeySelect');
+      if (!select) { hideAllModals(); return; }
+      const idx = parseInt(select.value);
+      const valueInput = document.getElementById('applyKeyValue');
+      const rawKey = valueInput.value.trim();
+      const statusEl = document.getElementById('applyKeyStatus');
+      const confirmBtn = document.getElementById('applyKeyConfirmBtn');
+      confirmBtn.disabled = true;
+      statusEl.style.display = 'block';
+      const key = _applyKeyCache[idx];
+      if (!key) { statusEl.innerHTML = '<small class="text-danger">Invalid selection</small>'; confirmBtn.disabled = false; return; }
+      const planLabel = (key.plan_name && key.plan_name.trim()) ? key.plan_name : 'Default';
+      const tokenName = sanitizeKeyName(planLabel, _applyKeyUsername);
+      const tokenValue = rawKey;
+      if (!tokenValue) {
+        statusEl.innerHTML = '<small class="text-warning">Select a key first — wait for it to load, or paste one below.</small>';
+        confirmBtn.disabled = false;
+        return;
+      }
+      statusEl.innerHTML = '<small class="text-info">Saving ' + escapeHtml(tokenName) + '...</small>';
+      try {
+        const kr = await fetch('/api/keys');
+        const kd = await kr.json();
+        const existing = (kd.keys || []);
+        let existingIdx = -1;
+        if (tokenValue) {
+          for (let j = 0; j < existing.length; j++) {
+            if (existing[j].key === tokenValue) { existingIdx = j; break; }
+          }
+        }
+        if (existingIdx >= 0) {
+          const ui = await fetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', index: existingIdx, name: tokenName, platformUser: _applyKeyUsername }) });
+          const ud = await ui.json();
+          if (ud.success) {
+            showToast('Key updated: ' + escapeHtml(tokenName), 'success');
+            fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallpaperMode: 'ai' }) }).catch(() => {});
+            const wpAi = document.getElementById('wp-ai');
+            if (wpAi) wpAi.checked = true;
+            loadConfiguration().then(() => { hideAllModals(); checkHealth(true); openKeysModal(); });
+            return;
+          }
+        }
+        const addResp = await fetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', name: tokenName, key: tokenValue, platformUser: _applyKeyUsername }) });
+        const addData = await addResp.json();
+        if (addData.success) {
+          showToast('Key added: ' + escapeHtml(tokenName), 'success');
+          fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallpaperMode: 'ai' }) }).catch(() => {});
+          const wpAi = document.getElementById('wp-ai');
+          if (wpAi) wpAi.checked = true;
+          loadConfiguration().then(() => { hideAllModals(); checkHealth(true); openKeysModal(); });
+        } else {
+          statusEl.innerHTML = '<small class="text-danger">Failed: ' + escapeHtml(addData.error || 'unknown') + '</small>';
+          confirmBtn.disabled = false;
+        }
+      } catch (e) {
+        statusEl.innerHTML = '<small class="text-danger">Error: ' + escapeHtml(e.message) + '</small>';
+        confirmBtn.disabled = false;
+      }
+    }
+
+    async function retrievePlatformKeys() {
+      const platformLogged = await (await fetch('/api/account')).json();
+      if (!platformLogged.logged_in) {
+        bootstrap.Modal.getInstance(document.getElementById('keysModal'))?.hide();
+        setTimeout(openPlatformLoginModal, 300);
+        showToast('Login to platform first to retrieve tokens', 'warning');
+        return;
+      }
+      bootstrap.Modal.getInstance(document.getElementById('keysModal'))?.hide();
+      setTimeout(openApplyKeyModal, 300);
+    }
+
     async function platformLogout() {
       try {
         hideAllModals();
@@ -1325,18 +1642,33 @@
         const data = await r.json();
         if (data.success) {
           accountData = null;
-          if (config?.tokens && config.tokens.length > 0) {
-            config.tokens[0].platformUsername = '';
-            config.tokens[0].platformPassword = '';
-            config.tokens[0].platformToken = '';
-            config.tokens[0].platformUser = null;
-          }
           showToast('Logged out', 'success');
           fetchStepPlanStatus();
           openKeysModal();
+          syncAiWallpaperWithKeys();
         }
       } catch (e) {
         showToast('Logout failed', 'danger');
+      }
+    }
+
+    async function removePlatformUser(username) {
+      if (!confirm('Logout and remove platform user "' + username + '"? This will unlink the account from all keys.')) return;
+      try {
+        const r = await fetch('/api/logout', { method: 'POST' });
+        const data = await r.json();
+        if (data.success) {
+          accountData = null;
+          showToast('Logged out and removed: ' + escapeHtml(username), 'success');
+          await loadConfiguration();
+          await syncAiWallpaperWithKeys();
+          await fetchStepPlanStatus();
+          openKeysModal();
+        } else {
+          showToast('Failed: ' + (data.error || 'unknown'), 'danger');
+        }
+      } catch (e) {
+        showToast('Error: ' + e.message, 'danger');
       }
     }
 
@@ -1364,7 +1696,7 @@
       const nameEl = document.getElementById('planName' + p);
       const expiryEl = document.getElementById('planExpiry' + p);
       if (sub) {
-        const name = sub.name || 'Unknown';
+        const name = sub.name || sub.plan_name || 'Free Plan';
         const periodEnd = sub.current_period_end;
         if (nameEl) { nameEl.textContent = name; nameEl.style.color = sub.status === 'active' ? '#32CD32' : ''; nameEl.setAttribute('title', `${name} - ${sub.status}`); }
         if (periodEnd && expiryEl) {
@@ -1381,7 +1713,7 @@
           }
         }
       } else {
-        if (nameEl) { nameEl.textContent = 'No Plan'; nameEl.style.color = ''; nameEl.removeAttribute('title'); }
+        if (nameEl) { nameEl.textContent = 'Free Access'; nameEl.style.color = ''; nameEl.removeAttribute('title'); }
         if (expiryEl) expiryEl.textContent = '';
       }
       const weekly = data.weekly;
@@ -1462,7 +1794,7 @@
         nameEl.style.color = '';
         nameEl.setAttribute('title', displayName);
       } else {
-        nameEl.textContent = 'No Plan';
+        nameEl.textContent = 'Free Access';
         nameEl.style.color = '';
         nameEl.removeAttribute('title');
       }
@@ -1564,11 +1896,11 @@
       let hasAnyKeys = false;
       try {
         const [planResp, keysResp] = await Promise.all([
-          fetch('/api/step-plan-status?t=' + Date.now() + '&_=' + Math.random()),
+          fetch('/api/get-plan-status?t=' + Date.now() + '&_=' + Math.random()),
           fetch('/api/keys')
         ]);
         if (planResp.ok) { realData = await planResp.json(); stepPlanData = realData; }
-        if (keysResp.ok) { const kd = await keysResp.json(); hasAnyKeys = !!(kd.keys && kd.keys.length > 0); }
+        if (keysResp.ok) { const kd = await keysResp.json(); hasAnyKeys = !!(kd.safe && kd.safe.some(s => s.has_key || s.has_token)); }
       } catch (e) {}
 
       // Always restore the plan slideshow structure so plan data is visible
@@ -1588,10 +1920,21 @@
         planSlides = [{ keyName: 'Plan', data: realData }];
         keyPlanDataCache = [realData];
 
-        const legendEl = document.getElementById('planLegend');
-        if (legendEl) legendEl.title = realData.username || '';
+        // Restore columns visibility (in case a previous no-plan state hid them)
+        const planCol = document.getElementById('planColumn');
+        const fiveCol = document.getElementById('fiveHourColumn');
+        const weekCol = document.getElementById('weeklyColumn');
+        if (planCol) planCol.style.display = '';
+        if (fiveCol) fiveCol.style.display = '';
+        if (weekCol) weekCol.style.display = '';
+        // Restore the slideshow's reserved min-height
+        const slideshowRestore = document.getElementById('planSlideshow');
+        if (slideshowRestore) slideshowRestore.style.minHeight = '120px';
 
-        hasImageGen = !!(realData.subscription_features && realData.subscription_features.image_gen);
+        const legendEl = document.getElementById('planLegend');
+        if (legendEl) { legendEl.textContent = 'Plan'; legendEl.title = realData.username || ''; }
+
+        hasImageGen = hasAnyKeys;
         updateAiWallpaperButton();
 
         // Directly render plan name and expiry
@@ -1599,7 +1942,7 @@
         const expiryEl = document.getElementById('planExpiry');
         const sub = realData.subscription;
         if (sub) {
-          if (nameEl) { nameEl.textContent = sub.name || 'Unknown'; nameEl.removeAttribute('title'); nameEl.style.color = ''; }
+          if (nameEl) { nameEl.textContent = sub.name || sub.plan_name || 'Free Plan'; nameEl.removeAttribute('title'); nameEl.style.color = ''; }
           if (sub.current_period_end && expiryEl) {
             const msLeft = (new Date(sub.current_period_end).getTime()) - Date.now();
             if (msLeft > 0) {
@@ -1663,40 +2006,66 @@
 
         currentSlide = 0;
       } else {
-        hasImageGen = false;
+        hasImageGen = hasAnyKeys;
         updateAiWallpaperButton();
 
-        // No plan — replace fieldset with appropriate card
+        // No plan — populate the top 3-column black category card with "Free Access",
+        // and show the detailed no-plan info as an additional black card below.
         const loggedIn = realData?.logged_in;
+        const statusLine = loggedIn ? 'Free Access' : 'No key configured';
+        const planNameEl = document.getElementById('planName');
+        const planExpiryEl = document.getElementById('planExpiry');
+        const planLegendEl = document.getElementById('planLegend');
+        if (planLegendEl) { planLegendEl.textContent = 'NO KEYS'; planLegendEl.title = ''; }
+        // Hide the entire plan stats row (Free Access block + fake usage dashboard) when no plan
+        const planCol = document.getElementById('planColumn');
+        const fiveCol = document.getElementById('fiveHourColumn');
+        const weekCol = document.getElementById('weeklyColumn');
+        if (planCol) planCol.style.display = 'none';
+        if (fiveCol) fiveCol.style.display = 'none';
+        if (weekCol) weekCol.style.display = 'none';
+        // Collapse the slideshow's reserved min-height so the fieldset shrinks to fit the no-plan card
+        const slideshowForCollapse = document.getElementById('planSlideshow');
+        if (slideshowForCollapse) slideshowForCollapse.style.minHeight = '0';
+
+        // Remove any existing extra no-plan card, then append a detailed one
+        const existing = fieldset.querySelector('.no-plan-card-wrap');
+        if (existing) existing.remove();
         const cardHtml = !hasAnyKeys
-          ? `<div class="glass-panel"></div>
-            <div class="no-plan-card" style="position:relative;z-index:5">
-              <h5>How the Free Tier Works</h5>
+            ? `<div class="no-plan-card" style="position:relative;z-index:5">
+              <h5>${statusLine}</h5>
               <ul>
                 <li><strong>Indefinitely Free:</strong><br>The proprietary baseline models — such as Agnes-2.0-Flash — are free to use without a time trial or credit card.</li>
-                <li><strong>Dynamic Rate Limits:</strong><br>Rather than giving you a hard monthly number (like 1 million tokens), the platform throttles requests based on real-time server load. During peak hours, your generation speeds may slow down or briefly pause to prioritize paid developer traffic.</li>
+                <li><strong>Rate Limits:</strong><br>Free tier: 20 req/min. Paid plans have a 5-hour request limit:<br>Starter: 1,500 / 5h<br>Plus: 7,500 / 5h<br>Pro: 30,000 / 5h</li>
               </ul>
               <p class="subscribe-text">Consider subscribing to keep the service up and available for everyone if you like it.</p>
               <a href="https://platform.agnes-ai.com/subscribe/subscription?from=dashboard" target="_blank">View Plans &amp; Pricing</a>
             </div>`
           : loggedIn
-            ? `<div class="glass-panel"></div>
-              <div class="no-plan-card" style="position:relative;z-index:5">
-                <h5>No Active Subscription</h5>
-                <p>You're logged in but don't have an active subscription. The free tier provides access to baseline models with dynamic rate limits.</p>
+          ? `<div class="no-plan-card" style="position:relative;z-index:5">
+                <h5>${statusLine}</h5>
+                <p>You're logged in but don't have an active subscription. The free tier provides access to all models, but with a 20 RPM limit.</p>
                 <p class="subscribe-text">Subscribe for higher rate limits and premium models.</p>
                 <a href="https://platform.agnes-ai.com/subscribe/subscription?from=dashboard" target="_blank" style="margin-right:12px">View Plans &amp; Pricing</a>
                 <button class="btn btn-outline-action" onclick="platformLogout()" style="font-size:12px"><i class="bi bi-box-arrow-right me-1"></i>Logout</button>
               </div>`
-            : `<div class="glass-panel"></div>
-              <div class="no-plan-card" style="position:relative;z-index:5">
-                <h5>Login to View Your Plan</h5>
+            : `<div class="no-plan-card" style="position:relative;z-index:5">
+                <h5>${statusLine}</h5>
                 <p>Log in to your Agnes AI account to see subscription details, usage stats, and manage your plan.</p>
                 <button class="btn btn-outline-action" onclick="openPlatformLoginModal()" style="margin-bottom:12px"><i class="bi bi-person-fill me-1"></i>Login to Platform</button>
                 <p class="subscribe-text">Don't have an account?</p>
                 <a href="https://platform.agnes-ai.com/subscribe/subscription?from=dashboard" target="_blank">View Plans &amp; Pricing</a>
               </div>`;
-        fieldset.innerHTML = cardHtml;
+        const wrap = document.createElement('div');
+        wrap.className = 'no-plan-card-wrap';
+        wrap.style.cssText = '';
+        wrap.innerHTML = cardHtml;
+        const slideshow = document.getElementById('planSlideshow');
+        if (slideshow && slideshow.parentElement === fieldset) {
+          fieldset.insertBefore(wrap, slideshow.nextSibling);
+        } else if (fieldset) {
+          fieldset.appendChild(wrap);
+        }
         setTimeout(() => initLiquidGlass(), 50);
       }
     }
@@ -1753,7 +2122,9 @@
       loadConfiguration(),
       checkHealth(),
       fetchStepPlanStatus(),
-    ]).then(() => {
+    ]).then(async () => {
+      await syncAiWallpaperWithKeys();
+      await probeApiKey();
       initLiquidGlass();
       setTimeout(() => window.dispatchEvent(new Event('resize')), 1000);
       setTimeout(() => window.dispatchEvent(new Event('resize')), 3000);
