@@ -2,6 +2,8 @@
 
 OpenAI-compatible proxy server for [Agnes AI](https://agnes-ai.com), providing access to Agnes LLM models through a unified API. Zero external dependencies — uses only Node.js built-in modules.
 
+Also a techdemo that demonstrates interaction with the api, including authed api calls (testchat), image generation (wallpaper) and translation (text in dashboard).
+
 <img width="1135" height="896" alt="image" src="https://github.com/user-attachments/assets/3e964418-44bc-4b1e-b6b7-cf5b3ed7a64d" />
 
 <img width="638" height="159" alt="image" src="https://github.com/user-attachments/assets/1a963114-d3c9-4e3c-9ac6-9516957b793e" />
