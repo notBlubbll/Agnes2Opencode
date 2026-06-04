@@ -26,6 +26,7 @@ OpenAI-compatible proxy server for [Agnes AI](https://agnes-ai.com), providing a
 - **Plan Status** — View subscription status, usage windows, and billing info from the dashboard
 - **Retry Logic** — Automatic retry with exponential backoff for transient errors (model unavailable, query engine)
 - **Test Mode** — Mock responses for development without consuming API credits
+- **Test Chat Bar** — Quick in-dashboard chat with `agnes-2.0-flash` or `agnes-1.5-flash` to verify your API key (visible only when at least one key is configured)
 - **Zero Dependencies** — No npm packages required
 
 ## Available Models
@@ -48,7 +49,7 @@ Models are dynamically fetched from `https://apihub.agnes-ai.com/v1/models` on s
   The proprietary baseline models — such as Agnes-2.0-Flash — are free to use without a time trial or credit card.
 
 - **Rate Limits:**
-  Free tier: 20 req/min. Paid plans have a 5-hour request limit: Starter: 1,500 / 5h | Plus: 7,500 / 5h | Pro: 30,000 / 5h
+  Free tier: 8 RPM (Request Per Minute). Paid plans have a 5-hour request limit: Starter: 1,500 / 5h | Plus: 7,500 / 5h | Pro: 30,000 / 5h
 
 Consider subscribing to keep the service up and available for everyone if you like it. [View Plans & Pricing](https://platform.agnes-ai.com/subscribe/subscription?from=website)
 
@@ -107,6 +108,7 @@ Edit `.config/config.json` or set environment variables:
 | `WALLPAPER_MODE` | Wallpaper source: `none`, `bing`, or `ai` | `bing` |
 | `WALLPAPER_PROMPT` | Prompt for AI wallpaper generation | `realistic vibrant colorful mountain range landscape` |
 | `TEST_MODE` | Return mock responses without calling upstream | `false` |
+| `LOCAL_OVERWRITE` | Force a single dashboard locale (e.g. `de`, `fr`, `ja`). When set, the autotranslate toggle is locked ON and the browser locale is ignored. Also forces `de` when `TEST_MODE=true`. | `null` |
 
 ### Multi-Key Management
 
@@ -198,6 +200,7 @@ Access at `http://localhost:8080`:
 - **SS Mode** — Blur sensitive tokens for screenshots
 - **Liquid Glass Effects** — Canvas-generated SVG displacement maps with refraction profiles
 - **Model Management** — Toggle models on/off with capability badges (reasoning, tools, vision, context)
+- **Test Chat** — Quick chat with `agnes-2.0-flash` or `agnes-1.5-flash` under the Models block, with the last 4 messages, local `HH:MM` timestamps, and a clear button. Hidden when no API key is configured.
 - **API Key Manager** — Add/edit/delete API keys with inline editing, platform account info display
 - **Platform Login** — Login with Agnes AI account, add multiple accounts, view account info, logout
 - **Retrieve Keys from Platform** — Fetch API keys from logged-in platform account, select and apply with auto-fill
@@ -205,6 +208,28 @@ Access at `http://localhost:8080`:
 - **Wallpaper Toggle** — Switch between None, Bing, and AI Image modes with configurable prompt (auto-enables AI on key save)
 - **Collapsible Sections** — Models, API Key, Quick Actions, Environment, Proxy Configuration
 - **Auto-refresh** — Health check every 15s, plan status every 30s
+- **Autotranslate (beta)** — Bottom-left checkbox that translates every UI string via Agnes AI. When `TEST_MODE` is on or `LOCAL_OVERWRITE` is set in config, the toggle is forced ON and locked.
+
+### Autotranslate (i18n)
+
+The dashboard ships with an English-only UI. Toggling **autotranslate (beta)** in the bottom-left corner:
+
+1. Detects the browser locale (or honors the proxy-side `forced_locale`)
+2. Shows a fullscreen black "Translating" overlay
+3. Fetches `/api/i18n?locale=<xx>&generate=1`, which calls Agnes AI (`agnes-2.0-flash`) to translate the entire UI string catalog in batches of 30
+4. Caches the result on disk at `.cache/i18n/<locale>.json` for instant reuse on next startup
+5. Applies the translations in place across every `data-i18n` / `data-i18n-placeholder` / `data-i18n-title` element, then hides the overlay
+
+Locale resolution priority (highest to lowest):
+
+1. `?locale=<xx>` URL query parameter
+2. `config.localOverwrite` (forced by server)
+3. `config.testMode === true` → forces `de`
+4. `localStorage.preferredLocale` (user's previous toggle state)
+5. `navigator.languages[0]`
+6. `en`
+
+The proxy prefetches translations on startup whenever a forced locale is in effect, so the very first dashboard load is already translated.
 
 ## API Endpoints
 
@@ -227,13 +252,14 @@ Access at `http://localhost:8080`:
 | `POST` | `/api/generate-image` | Generate AI wallpaper, save to `.cache/ai-paper.jpg` |
 | `GET` / `POST` | `/api/keys` | Multi-key CRUD (add/update/delete, includes `platformUsername`) |
 | `GET` | `/api/account` | Platform user data (`{ logged_in, user }`) |
-| `GET` | `/api/step-plan-status` | Subscription plan status with usage windows |
+| `GET` | `/api/plan-status` | Subscription plan status with usage windows |
 | `POST` | `/api/login` | Platform login with `{ username, password }` |
 | `POST` | `/api/logout` | Clear platform session and saved credentials |
 | `GET` | `/api/platform/user` | Platform user info (requires login) |
 | `GET` | `/api/platform/keys` | Fetch API keys from platform (`GET /api/token`) with plan name and username |
 | `GET` | `/api/platform/token/:id/key` | Fetch full API key value from platform (`POST /api/token/:id/key`) |
 | `GET` / `DELETE` | `/api/cache` | View/clear response cache |
+| `GET` | `/api/i18n?locale=<xx>[&generate=1]` | Fetch translated UI strings; `&config=1` returns the effective forced locale. `&generate=1` triggers Agnes translation on first use, then caches. |
 
 ## Architecture
 
@@ -265,6 +291,7 @@ dashboard.html
 ├── Liquid Glass Engine   — Canvas-based displacement/specular maps with refraction profiles
 ├── Plan Fieldset         — Subscription status, usage bars, login CTA
 ├── Model Management      — Toggle models on/off with capability badges
+├── Test Chat Bar         — Quick chat (Agnes 2.0/1.5 Flash), last 4 msgs, HH:MM timestamps, key-gated
 ├── API Key Manager       — Add/edit/delete API keys + platform account info
 ├── Platform Login Modal  — Username/password login, add-account mode, Enter key support
 ├── Apply API Key Modal   — Post-login key selector with previews, full key auto-fetch

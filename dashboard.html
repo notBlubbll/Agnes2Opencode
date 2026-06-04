@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Agnes2Opencode Dashboard</title>
+  <link id="dynamic-favicon" rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
+  <link rel="alternate icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAJElEQVR42mNkYPhfz0AEYBxVSF+FAAhKAQEtnn4HAAAAAElFTkSuQmCC">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
@@ -21,6 +23,81 @@
       padding: 0;
       background: black;
     }
+    .autotranslate-toggle {
+      position: fixed;
+      left: 12px;
+      bottom: 12px;
+      z-index: 1080;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 999px;
+      color: rgba(255,255,255,0.85);
+      font-size: 12px;
+      letter-spacing: 0.2px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    }
+    .autotranslate-toggle:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.3);
+      color: white;
+    }
+    .autotranslate-toggle input {
+      margin: 0;
+      accent-color: #32CD32;
+      cursor: pointer;
+    }
+    .autotranslate-toggle .beta-tag {
+      font-size: 10px;
+      color: rgba(255,255,255,0.55);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .translate-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100000;
+      background: rgba(0,0,0,0.88);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      color: white;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    .translate-overlay.show {
+      display: flex;
+    }
+    .translate-overlay .spinner-ring {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: 4px solid rgba(255,255,255,0.15);
+      border-top-color: #32CD32;
+      animation: translate-spin 0.9s linear infinite;
+    }
+    .translate-overlay .title {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+    }
+    .translate-overlay .subtitle {
+      font-size: 13px;
+      color: rgba(255,255,255,0.65);
+      max-width: 320px;
+      text-align: center;
+      line-height: 1.5;
+    }
+    @keyframes translate-spin { to { transform: rotate(360deg); } }
     .dashboard-container {
       position: relative;
       z-index: 10;
@@ -355,15 +432,16 @@
       display: inline-flex;
       align-items: center;
       gap: 3px;
-      padding: 2px 7px;
-      border-radius: 4px;
+      padding: 1px 5px;
+      border-radius: 3px;
       cursor: pointer;
       border: 1px solid rgba(255, 255, 255, 0.12);
       background: rgba(255, 255, 255, 0.03);
       opacity: 0.5;
       user-select: none;
       transition: all 0.15s ease;
-      margin: 1.5px;
+      margin: 1px;
+      line-height: 1.4;
     }
     .model-tag.enabled {
       border-color: rgba(50, 205, 50, 0.3);
@@ -373,21 +451,36 @@
     .model-tag:hover { opacity: 0.8; }
     .model-tag.enabled:hover { opacity: 1; }
     .model-tag-name {
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
       color: #fff;
       white-space: nowrap;
     }
     .model-tag-id {
-      font-size: 8px;
-      color: #fff;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.55);
       white-space: nowrap;
-      opacity: 0.6;
+      opacity: 0.85;
+    }
+    .model-tag-sep {
+      display: inline-block;
+      width: 2px;
+      height: 2px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.35);
+      margin: 0 1px;
+      vertical-align: middle;
+    }
+    .model-tag-row {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0;
     }
     .model-tag input[type="checkbox"] {
       pointer-events: none;
-      transform: scale(0.75);
-      margin: 0;
+      transform: scale(0.6);
+      margin: 0 2px 0 0;
     }
     .model-family-group {
       margin-bottom: 6px;
@@ -411,7 +504,7 @@
     .no-plan-card {
       background: rgba(0,0,0,0.4);
       border-radius: 12px;
-      padding: 20px 24px;
+      padding: 10px 12px;
       border: 1px solid rgba(255,255,255,0.1);
       text-align: left;
       min-height: 80px;
@@ -460,27 +553,28 @@
       display: none;
       margin-top: -10px;
       margin-bottom: 20px;
+      background: transparent;
+      border: none;
+      border-radius: 12px;
+      overflow: visible;
     }
     .test-chat-card.visible { display: block; }
-    .test-chat-card .card-content {
-      background: rgba(0,0,0,0.4);
-      backdrop-filter: blur(13px) !important;
-      -webkit-backdrop-filter: blur(13px) !important;
-    }
     .test-chat-header {
-      background: rgba(0,0,0,0.2) !important;
+      background: rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.12);
       border-bottom: 1px solid rgba(255,255,255,0.15);
+      border-radius: 0;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       font-size: 12px;
       color: white;
-      padding: 0.35rem 1rem;
+      padding: 0.4rem 1rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      position: relative;
-      z-index: 4;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
     }
     .test-chat-model-select {
       background: rgba(255,255,255,0.12);
@@ -520,22 +614,39 @@
     }
     .test-chat-transcript {
       height: 200px;
-      overflow-y: auto;
-      padding: 6px 8px;
+      box-sizing: border-box;
+      padding: 0;
       margin-bottom: 8px;
       background: rgba(0,0,0,0.25);
       border: 1px solid rgba(255,255,255,0.08);
       border-radius: 8px;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      overflow: hidden;
+      position: relative;
+    }
+    .test-chat-scroll {
+      position: absolute;
+      top: 6px;
+      left: 8px;
+      right: 8px;
+      bottom: 6px;
+      overflow-y: auto;
+      overflow-x: hidden;
       display: flex;
       flex-direction: column;
       justify-content: flex-end;
-      gap: 6px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.2) rgba(255,255,255,0.04);
     }
-    .test-chat-transcript::-webkit-scrollbar { width: 6px; }
-    .test-chat-transcript::-webkit-scrollbar-track { background: rgba(255,255,255,0.04); border-radius: 3px; }
-    .test-chat-transcript::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+    .test-chat-pairs {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 0;
+    }
+    .test-chat-scroll::-webkit-scrollbar { width: 6px; }
+    .test-chat-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,0.04); border-radius: 3px; }
+    .test-chat-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+    .test-chat-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
     .test-chat-msg {
       font-size: 12px;
       line-height: 1.45;
@@ -546,6 +657,19 @@
       backdrop-filter: blur(6px);
       -webkit-backdrop-filter: blur(6px);
     }
+    .test-chat-msg-content {
+      max-height: 75px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.2) rgba(255,255,255,0.04);
+    }
+    .test-chat-msg-content::-webkit-scrollbar { width: 6px; }
+    .test-chat-msg-content::-webkit-scrollbar-track { background: rgba(255,255,255,0.04); border-radius: 3px; }
+    .test-chat-msg-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+    .test-chat-msg-content::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
     .test-chat-msg.user {
       background: rgba(50, 205, 50, 0.12);
       border: 1px solid rgba(50, 205, 50, 0.25);
@@ -697,6 +821,18 @@
   </style>
 </head>
 <body>
+  <div class="translate-overlay" id="translateOverlay">
+    <div class="spinner-ring"></div>
+    <div class="title" data-i18n="overlay_translating">Translating</div>
+    <div class="subtitle" id="translateOverlaySubtitle" data-i18n="overlay_translating_sub" data-i18n-template="overlay_translating_sub">Translating UI to {lang}...</div>
+    <button class="translate-cancel" id="translateCancelBtn" type="button"><span data-i18n="overlay_cancel">Cancel</span></button>
+  </div>
+
+  <label class="autotranslate-toggle" id="autotranslateToggle">
+    <input type="checkbox" id="autotranslateCheckbox">
+    <span data-i18n="autotranslate_label">autotranslate (beta)</span>
+  </label>
+
   <svg style="position:absolute;overflow:hidden;width:0;height:0" color-interpolation-filters="sRGB">
     <defs id="glass-defs"></defs>
   </svg>
@@ -709,12 +845,12 @@
       <div class="card-content px-2">
         <div class="d-flex justify-content-between align-items-center">
           <div>
-            <h4 class="mb-0"><i class="bi bi-lightning-charge-fill me-2"></i>Agnes2Opencode Dashboard</h4>
+            <h4 class="mb-0"><i class="bi bi-lightning-charge-fill me-2"></i><span data-i18n="app_title">Agnes2Opencode Dashboard</span></h4>
           </div>
           <div class="text-end">
             <div>
               <span id="statusIndicator" class="status-indicator status-unknown"></span>
-              <span id="statusText" class="fw-medium">Checking...</span>
+              <span id="statusText" class="fw-medium" data-i18n="status_checking">Checking...</span>
             </div>
           </div>
         </div>
@@ -723,15 +859,15 @@
 
     <div class="plan-fieldset" data-glass id="planFieldset">
       <div class="glass-panel"></div>
-      <span class="plan-fieldset-legend" id="planLegend">Plan</span>
+      <span class="plan-fieldset-legend" id="planLegend" data-i18n="plan_legend">Plan</span>
       <div id="planSlideshow" style="position:relative;min-height:120px">
         <div class="plan-slide active" id="planSlide0">
           <div class="row text-center align-items-stretch">
             <div class="col-4" id="planColumn">
               <div class="stats-card card h-100 d-flex flex-column" data-glass>
                 <div class="card-content flex-grow-1 justify-content-center align-items-center d-flex flex-column" style="padding:8px">
-                  <div class="stats-value" id="planName" title="Loading...">Loading...</div>
-                  <div class="stats-label">Plan</div>
+                  <div class="stats-value" id="planName" title="Loading..." data-i18n-title="plan_loading">Loading...</div>
+                  <div class="stats-label" data-i18n="plan_label">Plan</div>
                   <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:4px" id="planExpiry">--</div>
                 </div>
               </div>
@@ -741,7 +877,7 @@
                 <div class="card-content flex-grow-1 justify-content-center d-flex flex-column" style="padding:8px">
                   <div class="usage-display">
                     <div class="usage-text" id="fiveHourUsage">--</div>
-                    <div class="stats-label">5h Usage</div>
+                    <div class="stats-label" data-i18n="usage_5h">5h Usage</div>
                     <div class="usage-bar-container">
                       <div class="usage-bar-fill" id="fiveHourBar" style="width:0%"></div>
                       <div class="usage-bar-text" id="fiveHourBarText"></div>
@@ -756,7 +892,7 @@
                 <div class="card-content flex-grow-1 justify-content-center d-flex flex-column" style="padding:8px">
                   <div class="usage-display">
                     <div class="usage-text" id="weeklyUsage">--</div>
-                    <div class="stats-label">Weekly Usage</div>
+                    <div class="stats-label" data-i18n="usage_weekly">Weekly Usage</div>
                     <div class="usage-bar-container">
                       <div class="usage-bar-fill" id="weeklyBar" style="width:0%"></div>
                       <div class="usage-bar-text" id="weeklyBarText"></div>
@@ -780,7 +916,7 @@
             <div class="card-header collapsible-header d-flex justify-content-between align-items-center" onclick="toggleSection('models')">
               <span>
                 <i class="bi bi-chevron-down toggle-icon me-1"></i>
-                <i class="bi bi-cpu-fill me-2"></i>Available Models
+                <i class="bi bi-cpu-fill me-2"></i><span data-i18n="section_models">Available Models</span>
               </span>
               <span class="badge bg-secondary" id="modelCountBadge">0</span>
             </div>
@@ -794,22 +930,26 @@
           <div class="glass-panel"></div>
           <div class="card-content">
             <div class="test-chat-header">
-              <span><i class="bi bi-chat-dots-fill me-2"></i>Test Chat</span>
-              <div class="d-flex align-items-center gap-2">
-                <select class="test-chat-model-select" id="testChatModelSelect" onchange="onTestChatModelChange()">
-                  <option value="agnes-2.0-flash" selected>Agnes 2.0 Flash</option>
-                  <option value="agnes-1.5-flash">Agnes 1.5 Flash</option>
-                </select>
-                <button class="test-chat-clear" id="testChatClearBtn" onclick="clearTestChat()" title="Clear conversation"><i class="bi bi-trash3"></i></button>
-              </div>
+            <span><i class="bi bi-chat-dots-fill me-2"></i>Test Chat</span>
+            <div class="d-flex align-items-center gap-2">
+              <select class="test-chat-model-select" id="testChatModelSelect" onchange="onTestChatModelChange()">
+                <option value="agnes-2.0-flash" selected>Agnes 2.0 Flash</option>
+                <option value="agnes-1.5-flash">Agnes 1.5 Flash</option>
+              </select>
+              <button class="test-chat-clear" id="testChatClearBtn" onclick="clearTestChat()" title="Clear conversation"><i class="bi bi-trash3"></i></button>
             </div>
+          </div>
             <div class="test-chat-body">
               <div class="test-chat-transcript" id="testChatTranscript">
-                <div class="test-chat-empty" id="testChatEmpty">Ask <span id="testChatModelName">Agnes 2.0 Flash</span> anything to test your API key.</div>
+                <div class="test-chat-scroll" id="testChatScroll">
+                  <div class="test-chat-pairs" id="testChatPairs">
+                    <div class="test-chat-empty" id="testChatEmpty">Ask <span id="testChatModelName" data-i18n="model_name_agnes_2">Agnes 2.0 Flash</span> anything to test your API key.</div>
+                  </div>
+                </div>
               </div>
               <div class="test-chat-input-row">
-                <input type="text" class="test-chat-input" id="testChatInput" placeholder="Type a message..." maxlength="2000" autocomplete="off">
-                <button class="test-chat-send" id="testChatSendBtn" onclick="sendTestChat()"><i class="bi bi-send-fill"></i><span>Send</span></button>
+                <input type="text" class="test-chat-input" id="testChatInput" placeholder="Type a message..." data-i18n-placeholder="test_chat_placeholder" maxlength="2000" autocomplete="off">
+                <button class="test-chat-send" id="testChatSendBtn" onclick="sendTestChat()"><i class="bi bi-send-fill"></i><span data-i18n="test_chat_send">Send</span></button>
               </div>
             </div>
           </div>
@@ -823,11 +963,11 @@
             <div class="card-header collapsible-header d-flex justify-content-between align-items-center" onclick="toggleSection('tokens')">
               <span>
                 <i class="bi bi-chevron-down toggle-icon me-1"></i>
-                <i class="bi bi-key-fill me-2"></i>API Key
+                <i class="bi bi-key-fill me-2"></i><span data-i18n="section_api_key">API Key</span>
               </span>
               <span class="d-flex align-items-stretch gap-2" style="height:100%">
                 <span class="badge bg-secondary d-flex align-items-center" id="tokenCountBadge">0</span>
-                <button class="btn btn-sm btn-outline-action rounded-0" onclick="event.stopPropagation();openKeysModal()" style="font-size:11px"><i class="bi bi-pencil me-1"></i>Manage</button>
+                <button class="btn btn-sm btn-outline-action rounded-0" onclick="event.stopPropagation();openKeysModal()" style="font-size:11px"><i class="bi bi-pencil me-1"></i><span data-i18n="btn_manage">Manage</span></button>
               </span>
             </div>
             <div class="card-body collapse-section" id="section-tokens">
@@ -841,14 +981,14 @@
           <div class="card-content">
             <div class="card-header collapsible-header" onclick="toggleSection('actions')">
               <i class="bi bi-chevron-down toggle-icon collapsed me-1"></i>
-              <i class="bi bi-lightning-charge-fill me-2"></i>Quick Actions
+              <i class="bi bi-lightning-charge-fill me-2"></i><span data-i18n="section_quick_actions">Quick Actions</span>
             </div>
             <div class="card-body collapse-section collapsed" id="section-actions">
               <div class="d-grid gap-2">
-                <button class="btn btn-outline-action" onclick="checkHealth()"><i class="bi bi-activity me-2"></i>Check Health</button>
-                <button class="btn btn-outline-action" onclick="testConnection()"><i class="bi bi-wifi me-2"></i>Test Connection</button>
-                <button class="btn btn-outline-action" onclick="refreshModels()"><i class="bi bi-arrow-clockwise me-2"></i>Refresh Models</button>
-                <button class="btn btn-outline-action" onclick="openPlatformLoginModal()"><i class="bi bi-person-fill me-2"></i>Platform Login</button>
+                <button class="btn btn-outline-action" onclick="checkHealth()"><i class="bi bi-activity me-2"></i><span data-i18n="btn_check_health">Check Health</span></button>
+                <button class="btn btn-outline-action" onclick="testConnection()"><i class="bi bi-wifi me-2"></i><span data-i18n="btn_test_connection">Test Connection</span></button>
+                <button class="btn btn-outline-action" onclick="refreshModels()"><i class="bi bi-arrow-clockwise me-2"></i><span data-i18n="btn_refresh_models">Refresh Models</span></button>
+                <button class="btn btn-outline-action" onclick="openPlatformLoginModal()"><i class="bi bi-person-fill me-2"></i><span data-i18n="btn_platform_login">Platform Login</span></button>
 
               </div>
             </div>
@@ -860,36 +1000,36 @@
           <div class="card-content">
             <div class="card-header collapsible-header" onclick="toggleSection('env')">
               <i class="bi bi-chevron-down toggle-icon collapsed me-1"></i>
-              <i class="bi bi-info-circle-fill me-2"></i>Environment
+              <i class="bi bi-info-circle-fill me-2"></i><span data-i18n="section_environment">Environment</span>
             </div>
             <div class="card-body collapse-section collapsed" id="section-env">
               <div class="mb-2">
-                <small class="text-muted">Runtime</small>
+                <small class="text-muted" data-i18n="env_runtime">Runtime</small>
                 <div class="fw-medium" id="runtimeInfo">-</div>
               </div>
               <div class="mb-2">
-                <small class="text-muted">Started At</small>
+                <small class="text-muted" data-i18n="env_started_at">Started At</small>
                 <div class="fw-medium" id="startedAt">-</div>
               </div>
               <div class="mb-2">
-                <label class="form-label" style="font-size:11px;margin-bottom:4px;color:rgba(255,255,255,0.6)">Wallpaper</label>
+                <label class="form-label" style="font-size:11px;margin-bottom:4px;color:rgba(255,255,255,0.6)" data-i18n="env_wallpaper">Wallpaper</label>
                 <div class="btn-group w-100" role="group" id="wallpaperGroup">
                   <input type="radio" class="btn-check" name="wallpaper" id="wp-none" value="none" autocomplete="off">
-                  <label class="btn btn-outline-action" for="wp-none">None</label>
+                  <label class="btn btn-outline-action" for="wp-none" data-i18n="wp_none">None</label>
                   <input type="radio" class="btn-check" name="wallpaper" id="wp-bing" value="bing" autocomplete="off" checked>
-                  <label class="btn btn-outline-action" for="wp-bing">Bing</label>
+                  <label class="btn btn-outline-action" for="wp-bing" data-i18n="wp_bing">Bing</label>
                   <input type="radio" class="btn-check" name="wallpaper" id="wp-ai" value="ai" autocomplete="off">
-                  <label class="btn btn-outline-action" for="wp-ai">AI Image</label>
+                  <label class="btn btn-outline-action" for="wp-ai" data-i18n="wp_ai">AI Image</label>
                 </div>
               </div>
               <div class="mb-2" id="aiPromptContainer" style="display:none">
-                <label class="form-label" style="font-size:10px;margin-bottom:2px;color:rgba(255,255,255,0.5)">AI Prompt</label>
-                <input type="text" class="form-control form-control-sm" id="aiPromptInput" placeholder="Image prompt..." style="background:rgba(0,0,0,0.3);border-color:rgba(255,255,255,0.15);color:white;font-size:11px">
+                <label class="form-label" style="font-size:10px;margin-bottom:2px;color:rgba(255,255,255,0.5)" data-i18n="wp_ai_prompt">AI Prompt</label>
+                <input type="text" class="form-control form-control-sm" id="aiPromptInput" placeholder="Image prompt..." data-i18n-placeholder="wp_ai_placeholder" style="background:rgba(0,0,0,0.3);border-color:rgba(255,255,255,0.15);color:white;font-size:11px">
               </div>
               <div class="mb-2">
                 <div class="form-check form-switch">
                   <input class="form-check-input" type="checkbox" id="blurTokensEnv" onchange="toggleBlurTokens(this.checked)">
-                  <label class="form-check-label text-muted" for="blurTokensEnv" style="cursor:pointer">SS Mode</label>
+                  <label class="form-check-label text-muted" for="blurTokensEnv" style="cursor:pointer" data-i18n="env_ss_mode">SS Mode</label>
                 </div>
               </div>
             </div>
@@ -901,23 +1041,23 @@
           <div class="card-content">
             <div class="card-header collapsible-header" onclick="toggleSection('config')">
               <i class="bi bi-chevron-down toggle-icon collapsed me-1"></i>
-              <i class="bi bi-gear-fill me-2"></i>Proxy Configuration
+              <i class="bi bi-gear-fill me-2"></i><span data-i18n="section_proxy_config">Proxy Configuration</span>
             </div>
             <div class="card-body collapse-section collapsed" id="section-config">
               <form id="configForm">
                 <div class="row">
                   <div class="col-6 mb-2">
-                    <label class="form-label" style="font-size:10px;margin-bottom:2px">Listen Address</label>
+                    <label class="form-label" style="font-size:10px;margin-bottom:2px" data-i18n="cfg_listen_addr">Listen Address</label>
                     <input type="text" class="form-control form-control-sm" id="listenAddr" value=":8082">
                   </div>
                   <div class="col-6 mb-2">
-                    <label class="form-label" style="font-size:10px;margin-bottom:2px">Timeout</label>
+                    <label class="form-label" style="font-size:10px;margin-bottom:2px" data-i18n="cfg_timeout">Timeout</label>
                     <input type="text" class="form-control form-control-sm" id="requestTimeout" value="15m">
                   </div>
                 </div>
                 <div class="row">
                   <div class="col-12 mb-2">
-                    <label class="form-label" style="font-size:10px;margin-bottom:2px">Upstream URL</label>
+                    <label class="form-label" style="font-size:10px;margin-bottom:2px" data-i18n="cfg_upstream_url">Upstream URL</label>
                     <input type="url" class="form-control form-control-sm" id="upstreamUrl" value="https://agnes-ai.com/api">
                   </div>
                 </div>
@@ -936,27 +1076,27 @@
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content" style="background:#1a1d23;color:white;border:1px solid rgba(255,255,255,0.1)">
         <div class="modal-header border-bottom-0">
-          <h5 class="modal-title"><i class="bi bi-key-fill me-2"></i>Manage API Keys</h5>
+          <h5 class="modal-title"><i class="bi bi-key-fill me-2"></i><span data-i18n="modal_manage_keys">Manage API Keys</span></h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body" id="keysModalBody">
           <div id="keysList"></div>
           <hr style="border-color:rgba(255,255,255,0.1)">
           <div class="mb-3">
-            <label class="form-label">Add New API Key</label>
-            <input type="text" class="form-control form-control-sm mb-2" id="newKeyName" placeholder="Key name (e.g. Key 2)">
-            <input type="text" class="form-control form-control-sm mb-2" id="newKey" placeholder="API key value">
-            <button class="btn btn-success btn-sm w-100" onclick="addKey()"><i class="bi bi-plus-circle me-1"></i>Add Key</button>
+            <label class="form-label" data-i18n="modal_add_key">Add New API Key</label>
+            <input type="text" class="form-control form-control-sm mb-2" id="newKeyName" placeholder="Key name (e.g. Key 2)" data-i18n-placeholder="key_name_placeholder">
+            <input type="text" class="form-control form-control-sm mb-2" id="newKey" placeholder="API key value" data-i18n-placeholder="key_value_placeholder">
+            <button class="btn btn-success btn-sm w-100" onclick="addKey()"><i class="bi bi-plus-circle me-1"></i><span data-i18n="btn_add_key">Add Key</span></button>
           </div>
           <div class="mb-3">
-            <button class="btn btn-outline-action btn-sm w-100" onclick="retrievePlatformKeys()"><i class="bi bi-cloud-download me-1"></i>Retrieve Tokens from Platform</button>
+            <button class="btn btn-outline-action btn-sm w-100" onclick="retrievePlatformKeys()"><i class="bi bi-cloud-download me-1"></i><span data-i18n="btn_retrieve_tokens">Retrieve Tokens from Platform</span></button>
           </div>
           <div class="mb-3">
-            <button class="btn btn-outline-action btn-sm w-100" onclick="bootstrap.Modal.getInstance(document.getElementById('keysModal'))?.hide();setTimeout(()=>openPlatformLoginModal('addAccount'),300)"><i class="bi bi-person-plus me-1"></i>Add Platform Account</button>
+            <button class="btn btn-outline-action btn-sm w-100" onclick="bootstrap.Modal.getInstance(document.getElementById('keysModal'))?.hide();setTimeout(()=>openPlatformLoginModal('addAccount'),300)"><i class="bi bi-person-plus me-1"></i><span data-i18n="btn_add_platform_account">Add Platform Account</span></button>
           </div>
         </div>
         <div class="modal-footer border-top-0">
-          <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+          <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal" data-i18n="btn_close">Close</button>
         </div>
       </div>
     </div>
@@ -967,23 +1107,23 @@
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content" style="background:#1a1d23;color:white;border:1px solid rgba(255,255,255,0.1)">
         <div class="modal-header border-bottom-0">
-          <h5 class="modal-title"><i class="bi bi-person-fill me-2"></i>Platform Login</h5>
+          <h5 class="modal-title"><i class="bi bi-person-fill me-2"></i><span data-i18n="modal_platform_login">Platform Login</span></h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
           <div class="mb-3">
-            <label class="form-label" style="font-size:12px">Username (email)</label>
-            <input type="text" class="form-control form-control-sm" id="platLoginUsername" placeholder="email@example.com">
+            <label class="form-label" style="font-size:12px" data-i18n="label_username">Username (email)</label>
+            <input type="text" class="form-control form-control-sm" id="platLoginUsername" placeholder="email@example.com" data-i18n-placeholder="username_placeholder">
           </div>
           <div class="mb-3">
-            <label class="form-label" style="font-size:12px">Password</label>
-            <input type="password" class="form-control form-control-sm" id="platLoginPassword" placeholder="password">
+            <label class="form-label" style="font-size:12px" data-i18n="label_password">Password</label>
+            <input type="password" class="form-control form-control-sm" id="platLoginPassword" placeholder="password" data-i18n-placeholder="password_placeholder">
           </div>
           <div id="platLoginStatus" style="display:none" class="mb-2"></div>
         </div>
         <div class="modal-footer border-top-0">
-          <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-success btn-sm" onclick="savePlatformLogin()"><i class="bi bi-check-circle me-1"></i>Save & Login</button>
+          <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal" data-i18n="btn_cancel">Cancel</button>
+          <button class="btn btn-success btn-sm" onclick="savePlatformLogin()"><i class="bi bi-check-circle me-1"></i><span data-i18n="btn_save_and_login">Save & Login</span></button>
         </div>
       </div>
     </div>
@@ -994,22 +1134,22 @@
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content" style="background:#1a1d23;color:white;border:1px solid rgba(255,255,255,0.1)">
         <div class="modal-header border-bottom-0">
-          <h5 class="modal-title"><i class="bi bi-key-fill me-2"></i>Apply API Key</h5>
+          <h5 class="modal-title"><i class="bi bi-key-fill me-2"></i><span data-i18n="modal_apply_key">Apply API Key</span></h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <p class="text-muted mb-3" style="font-size:12px" id="applyKeySubtitle">Select an API key from your account to apply.</p>
+          <p class="text-muted mb-3" style="font-size:12px" id="applyKeySubtitle" data-i18n="apply_key_subtitle">Select an API key from your account to apply.</p>
           <div id="applyKeyContent">
             <div class="text-center py-3">
               <div class="spinner-border spinner-border-sm text-light" role="status"></div>
-              <div class="mt-2 text-muted" style="font-size:12px">Loading keys...</div>
+              <div class="mt-2 text-muted" style="font-size:12px" data-i18n="apply_key_loading">Loading keys...</div>
             </div>
           </div>
           <div id="applyKeyStatus" style="display:none" class="mb-2 mt-2"></div>
         </div>
         <div class="modal-footer border-top-0">
-          <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Skip</button>
-          <button class="btn btn-success btn-sm" id="applyKeyConfirmBtn" onclick="applySelectedPlatformKey()"><i class="bi bi-check-circle me-1"></i>Apply Selected</button>
+          <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal" data-i18n="btn_skip">Skip</button>
+          <button class="btn btn-success btn-sm" id="applyKeyConfirmBtn" onclick="applySelectedPlatformKey()"><i class="bi bi-check-circle me-1"></i><span data-i18n="btn_apply_selected">Apply Selected</span></button>
         </div>
       </div>
     </div>
@@ -1197,6 +1337,224 @@
       setTimeout(() => toast.remove(), 3000);
     }
 
+    function t(key, fallback) {
+      if (window.__i18n && Object.prototype.hasOwnProperty.call(window.__i18n, key)) return window.__i18n[key];
+      const el = document.querySelector(`[data-i18n="${key}"]`);
+      if (el) return el.textContent;
+      return fallback !== undefined ? fallback : key;
+    }
+    function tHtml(key, fallback) {
+      if (window.__i18n && Object.prototype.hasOwnProperty.call(window.__i18n, key)) return window.__i18n[key];
+      return fallback !== undefined ? fallback : key;
+    }
+    function applyI18nToDocument() {
+      const dict = window.__i18n || {};
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (!Object.prototype.hasOwnProperty.call(dict, key)) return;
+        const isTpl = el.hasAttribute('data-i18n-template');
+        if (isTpl) {
+          const template = dict[key];
+          if (key === 'test_chat_empty') {
+            // keep the inner model-name span intact and only swap the wrapper text
+            const inner = el.querySelector('#testChatModelName');
+            const innerHTML = inner ? inner.outerHTML : '';
+            el.innerHTML = template.replace('{model}', innerHTML);
+          } else if (key === 'overlay_translating_sub') {
+            el.textContent = template.replace('{lang}', _currentLocaleNative || _currentLocale || '');
+          } else {
+            el.textContent = template;
+          }
+        } else {
+          el.textContent = dict[key];
+        }
+      });
+      document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        if (Object.prototype.hasOwnProperty.call(dict, key)) el.setAttribute('placeholder', dict[key]);
+      });
+      document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        if (Object.prototype.hasOwnProperty.call(dict, key)) el.setAttribute('title', dict[key]);
+      });
+      document.querySelectorAll('[data-i18n-value]').forEach(el => {
+        const key = el.getAttribute('data-i18n-value');
+        if (Object.prototype.hasOwnProperty.call(dict, key)) el.setAttribute('value', dict[key]);
+      });
+    }
+    function applyI18nToAttributes() {
+      const dict = window.__i18n || {};
+      document.querySelectorAll('[data-i18n-attr]').forEach(el => {
+        const spec = el.getAttribute('data-i18n-attr');
+        if (!spec) return;
+        spec.split(';').forEach(pair => {
+          const [attr, key] = pair.split(':').map(s => s && s.trim());
+          if (!attr || !key) return;
+          if (Object.prototype.hasOwnProperty.call(dict, key)) el.setAttribute(attr, dict[key]);
+        });
+      });
+    }
+
+    let _currentLocale = 'en';
+    let _currentLocaleNative = 'English';
+    const LOCALE_NATIVE_NAMES = {
+      en: 'English', de: 'Deutsch', fr: 'Français', es: 'Español', it: 'Italiano',
+      pt: 'Português', nl: 'Nederlands', pl: 'Polski', ru: 'Русский', uk: 'Українська',
+      tr: 'Türkçe', ja: '日本語', ko: '한국어', zh: '中文', ar: 'العربية',
+      cs: 'Čeština', ro: 'Română', hu: 'Magyar', sv: 'Svenska', da: 'Dansk',
+      fi: 'Suomi', no: 'Norsk', el: 'Ελληνικά', he: 'עברית', th: 'ไทย',
+      vi: 'Tiếng Việt', id: 'Bahasa Indonesia', hi: 'हिन्दी',
+    };
+
+    function detectDashboardLocale(serverForced) {
+      try {
+        const override = (new URLSearchParams(location.search).get('locale') || '').toLowerCase().split(/[-_]/)[0];
+        if (override) return override;
+        if (serverForced) return serverForced;
+        const stored = (localStorage.getItem('preferredLocale') || '').toLowerCase().split(/[-_]/)[0];
+        if (stored) return stored;
+        const navs = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en']);
+        for (const raw of navs) {
+          const tag = (raw || '').toLowerCase().split(/[-_]/)[0];
+          if (tag) return tag;
+        }
+      } catch (e) {}
+      return 'en';
+    }
+
+    let _serverForcedLocale = null;
+    async function fetchServerForcedLocale() {
+      try {
+        const r = await fetch('/api/i18n?config=1');
+        if (!r.ok) return null;
+        const d = await r.json();
+        _serverForcedLocale = d.forced_locale || null;
+        return _serverForcedLocale;
+      } catch (e) { return null; }
+    }
+
+    function getNativeName(locale) {
+      return LOCALE_NATIVE_NAMES[locale] || (locale || '').toUpperCase();
+    }
+
+    function showTranslateOverlay(subtitle) {
+      const ov = document.getElementById('translateOverlay');
+      if (!ov) return;
+      const sub = ov.querySelector('.subtitle');
+      if (sub && subtitle) sub.textContent = subtitle;
+      ov.classList.add('show');
+    }
+    function hideTranslateOverlay() {
+      const ov = document.getElementById('translateOverlay');
+      if (ov) ov.classList.remove('show');
+    }
+
+    async function fetchTranslations(locale, withGenerate) {
+      const u = new URL('/api/i18n', location.origin);
+      u.searchParams.set('locale', locale);
+      if (withGenerate) u.searchParams.set('generate', '1');
+      const resp = await fetch(u.toString());
+      if (!resp.ok) throw new Error('i18n http ' + resp.status);
+      return await resp.json();
+    }
+
+    async function applyTranslations(bundle) {
+      window.__i18n = bundle.strings || {};
+      _currentLocale = bundle.locale || 'en';
+      _currentLocaleNative = getNativeName(_currentLocale);
+      applyI18nToDocument();
+      applyI18nToAttributes();
+      // re-render dependent dynamic content
+      if (typeof renderKeysList === 'function' && accountData) {
+        try { renderKeysList((config && config.keys) || []); } catch (e) {}
+      }
+      if (typeof renderTokenPools === 'function' && proxyData) {
+        try { renderTokenPools(); } catch (e) {}
+      }
+      if (typeof renderModels === 'function' && typeof config !== 'undefined' && config && config.keys) {
+        try { renderModels(config.enabledModels || (config.keys.length ? [] : [])); } catch (e) {}
+      }
+      if (typeof updateTestChatEmptyText === 'function') {
+        try { updateTestChatEmptyText(); } catch (e) {}
+      }
+      if (typeof fetchPlanStatus === 'function') {
+        try { await fetchPlanStatus(); } catch (e) {}
+      }
+      if (typeof setTestChatBusy === 'function') {
+        try { setTestChatBusy(false); } catch (e) {}
+      }
+      // If the apply-key modal is open, re-render its dynamic content
+      const applyModal = document.getElementById('applyKeyModal');
+      if (applyModal && applyModal.classList.contains('show') && _applyKeyCache && _applyKeyCache.length) {
+        try { onApplyKeySelectChange(); } catch (e) {}
+      }
+    }
+
+    async function enableAutotranslate() {
+      const locale = detectDashboardLocale(_serverForcedLocale);
+      _currentLocale = locale;
+      _currentLocaleNative = getNativeName(locale);
+      const nativeName = _currentLocaleNative;
+      const subtitleTpl = (window.__i18n && window.__i18n.overlay_translating_sub) || 'Translating UI to {lang}...';
+      const subtitle = subtitleTpl.replace('{lang}', nativeName);
+      showTranslateOverlay(subtitle);
+      try {
+        let bundle = await fetchTranslations(locale, false);
+        if (bundle.source !== 'agnes' && locale !== 'en') {
+          // Need to generate on proxy
+          bundle = await fetchTranslations(locale, true);
+        }
+        if (locale !== 'en') {
+          await applyTranslations(bundle);
+        } else {
+          window.__i18n = bundle.strings || {};
+        }
+        if (!_serverForcedLocale) localStorage.setItem('preferredLocale', locale);
+      } catch (e) {
+        console.error('[i18n] failed', e);
+        showToast(t('toast_translation_failed', 'Translation failed: {error}').replace('{error}', e.message), 'danger');
+      } finally {
+        hideTranslateOverlay();
+      }
+    }
+
+    function disableAutotranslate() {
+      if (!_serverForcedLocale) {
+        localStorage.removeItem('preferredLocale');
+        location.reload();
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', async function() {
+      const cb = document.getElementById('autotranslateCheckbox');
+      if (!cb) return;
+      // Check server-side forced locale (test_mode or local_overwrite)
+      const forced = await fetchServerForcedLocale();
+      if (forced) {
+        cb.checked = true;
+        cb.disabled = true;
+        const hint = document.createElement('span');
+        hint.style.cssText = 'margin-left:6px;font-size:10px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.4px';
+        hint.textContent = '(forced: ' + forced + ')';
+        const label = cb.closest('label');
+        if (label && !label.querySelector('.forced-hint')) {
+          hint.className = 'forced-hint';
+          label.appendChild(hint);
+        }
+        setTimeout(() => enableAutotranslate(), 50);
+        cb.addEventListener('click', function(e) { e.preventDefault(); });
+        return;
+      }
+      // Normal: restore previous state from localStorage
+      const stored = localStorage.getItem('preferredLocale');
+      if (stored) cb.checked = true;
+      cb.addEventListener('change', function() {
+        if (cb.checked) enableAutotranslate();
+        else disableAutotranslate();
+      });
+      if (stored) setTimeout(() => enableAutotranslate(), 50);
+    });
+
     async function syncAiWallpaperWithKeys() {
       try {
         const r = await fetch('/api/keys');
@@ -1248,7 +1606,7 @@
         const kd = await keysResp.json();
         const realKeys = (kd.keys || []).filter(k => k.key);
         if (realKeys.length === 0) return false;
-        markKeyStatus('Checking…', 'status-checking');
+        markKeyStatus('checking');
         const r = await fetch('/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1261,20 +1619,23 @@
         });
         if (r.ok) {
           markKeyActive();
-          if (!silent) showToast('API key validated', 'success');
+          if (!silent) showToast(t('toast_api_key_validated', 'API key validated'), 'success');
           return true;
         }
-        markKeyStatus('Inactive', 'status-offline');
-        if (!silent) showToast('API key probe failed', 'danger');
+        markKeyStatus('inactive');
+        if (!silent) showToast(t('toast_api_key_probe_failed', 'API key probe failed'), 'danger');
         return false;
       } catch (e) {
-        markKeyStatus('Inactive', 'status-offline');
-        if (!silent) showToast('API key probe error', 'danger');
+        markKeyStatus('inactive');
+        if (!silent) showToast(t('toast_api_key_probe_error', 'API key probe error'), 'danger');
         return false;
       }
     }
 
-    function markKeyStatus(text, cssClass) {
+    const KEY_STATUS_CSS = { active: 'status-online', inactive: 'status-offline', checking: 'status-checking' };
+    function markKeyStatus(status) {
+      const cssClass = KEY_STATUS_CSS[status] || '';
+      const text = t('key_status_' + status, status.charAt(0).toUpperCase() + status.slice(1));
       const pools = document.querySelectorAll('#tokenPoolsContainer .pool-card');
       pools.forEach(card => {
         const statusEl = card.querySelector('.pool-status');
@@ -1286,7 +1647,7 @@
     }
 
     function markKeyActive() {
-      markKeyStatus('Active', 'status-online');
+      markKeyStatus('active');
       if (proxyData && Array.isArray(proxyData.token_state)) {
         proxyData.token_state.forEach(t => { if (t.status !== 'active') t.status = 'active'; });
       }
@@ -1329,6 +1690,81 @@
       } else {
         document.body.style.background = 'url("/api/bg?t=' + Date.now() + '") center/cover no-repeat fixed';
       }
+      updateFaviconFromBackground(source);
+    }
+
+    const FAVICON_SIZE = 64;
+    function makeCircularFaviconDataUrl(imageEl) {
+      const size = FAVICON_SIZE;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, size, size);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      const iw = imageEl.naturalWidth || imageEl.width;
+      const ih = imageEl.naturalHeight || imageEl.height;
+      if (iw > 0 && ih > 0) {
+        const scale = Math.max(size / iw, size / ih);
+        const dw = iw * scale;
+        const dh = ih * scale;
+        const dx = (size - dw) / 2;
+        const dy = (size - dh) / 2;
+        ctx.drawImage(imageEl, dx, dy, dw, dh);
+      }
+      ctx.restore();
+      return canvas.toDataURL('image/png');
+    }
+
+    function makeSolidCircleFaviconDataUrl(color) {
+      const size = FAVICON_SIZE;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, size, size);
+      ctx.fillStyle = color || '#000000';
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.fill();
+      return canvas.toDataURL('image/png');
+    }
+
+    function setFaviconHref(dataUrl) {
+      const link = document.getElementById('dynamic-favicon');
+      if (!link) return;
+      const newLink = link.cloneNode(true);
+      newLink.setAttribute('href', dataUrl);
+      newLink.setAttribute('type', 'image/png');
+      link.parentNode.replaceChild(newLink, link);
+    }
+
+    function _loadBgImage(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('favicon bg load failed'));
+        img.src = url;
+      });
+    }
+
+    async function updateFaviconFromBackground(source) {
+      try {
+        if (source === 'none') {
+          setFaviconHref(makeSolidCircleFaviconDataUrl('#0d1117'));
+          return;
+        }
+        const img = await _loadBgImage('/api/bg?t=' + Date.now());
+        setFaviconHref(makeCircularFaviconDataUrl(img));
+      } catch (e) {
+        setFaviconHref(makeSolidCircleFaviconDataUrl('#000000'));
+      }
     }
 
     async function loadConfiguration() {
@@ -1354,7 +1790,7 @@
         renderTokenPools();
         updateStats();
       } catch (error) {
-        showToast('Failed to load configuration', 'danger');
+        showToast(t('toast_failed_load_config', 'Failed to load configuration'), 'danger');
       }
     }
 
@@ -1378,7 +1814,7 @@
         if (existing) existing.show();
         else new bootstrap.Modal(keysModalEl).show();
       } catch (e) {
-        showToast('Failed to load keys', 'danger');
+        showToast(t('toast_failed_load_keys', 'Failed to load keys'), 'danger');
       }
     }
 
@@ -1386,34 +1822,54 @@
       const container = document.getElementById('keysList');
       const blurClass = blurTokensEnabled ? 'token-blurred' : '';
       const platformUsers = accountData?.platform_users || [];
+      const lblActive = t('status_active', 'Active');
+      const lblInactive = t('status_inactive', 'Inactive');
+      const lblUser = t('label_user', 'User');
+      const lblEmail = t('label_email', 'Email');
+      const lblStatus = t('label_status', 'Status');
+      const lblLastLogin = t('label_last_login', 'Last login');
+      const lblPlatformAccount = t('platform_account', 'Platform Account');
+      const lblOnline = t('online', 'Online');
+      const lblLogoutRemove = t('logout_and_remove', 'Logout & Remove');
+      const lblNoAccounts = t('no_platform_accounts', 'No platform accounts');
+      const lblLogin = t('btn_login', 'Login');
+      const lblNoKeys = t('tokens_no_keys', 'No API keys configured.');
+      const lblName = t('label_name', 'Name');
+      const lblKey = t('label_key', 'Key');
+      const lblSave = t('btn_save', 'Save');
+      const lblCancel = t('btn_cancel', 'Cancel');
+      const lblDelete = t('btn_delete', 'Delete');
+      const lblDeleteConfirm = t('delete_confirm', 'Delete this key?');
+      const lblUnnamed = t('tokens_unnamed', 'Unnamed');
+      const lblNone = t('user_none', 'None');
+      const lblSession = t('label_session', 'Session');
       let usersHtml = '';
       if (platformUsers.length > 0) {
         usersHtml = platformUsers.map(u => {
-          const loggedInUser = accountData?.logged_in && (accountData.user?.username === u.username || accountData.user?.email === u.email);
           const statusColor = u.is_active ? '#32CD32' : '#dc3545';
-          const statusText = u.is_active ? 'Active' : 'Inactive';
+          const statusText = u.is_active ? lblActive : lblInactive;
           return `<div class="mb-2 p-2" style="background:rgba(255,255,255,0.05);border-radius:8px;border:1px solid rgba(255,255,255,0.1);font-size:0.8rem">
             <div class="d-flex justify-content-between align-items-center" style="margin-bottom:4px">
-              <span style="color:rgba(255,255,255,0.5)"><i class="bi bi-person-circle me-1"></i>Platform Account</span>
+              <span style="color:rgba(255,255,255,0.5)"><i class="bi bi-person-circle me-1"></i>${escapeHtml(lblPlatformAccount)}</span>
               <div>
-                ${u.logged_in ? `<span style="color:#32CD32;font-size:0.7rem;margin-right:8px"><i class="bi bi-check-circle-fill"></i> Online</span>`: `<span style="color:rgba(255,255,255,0.3);font-size:0.7rem;margin-right:8px"><i class="bi bi-x-circle"></i></span>`}
-                <button class="btn btn-sm" style="background:rgba(220,53,69,0.2);color:#dc3545;border:none;font-size:0.7rem;padding:2px 8px" onclick="removePlatformUser('${escapeHtml(u.username)}')"><i class="bi bi-box-arrow-right me-1"></i>Logout &amp; Remove</button>
+                ${u.logged_in ? `<span style="color:#32CD32;font-size:0.7rem;margin-right:8px"><i class="bi bi-check-circle-fill"></i> ${escapeHtml(lblOnline)}</span>`: `<span style="color:rgba(255,255,255,0.3);font-size:0.7rem;margin-right:8px"><i class="bi bi-x-circle"></i></span>`}
+                <button class="btn btn-sm" style="background:rgba(220,53,69,0.2);color:#dc3545;border:none;font-size:0.7rem;padding:2px 8px" onclick="removePlatformUser('${escapeHtml(u.username)}')"><i class="bi bi-box-arrow-right me-1"></i>${escapeHtml(lblLogoutRemove)}</button>
               </div>
             </div>
-            <div>User: <span class="${blurClass}">${escapeHtml(u.username || u.email || '-')}</span></div>
-            <div>Email: <span>${escapeHtml(u.email || '-')}</span></div>
-            <div>Status: <span style="color:${statusColor}">${statusText}</span></div>
-            ${u.last_login ? `<div>Last login: <span>${escapeHtml(u.last_login)}</span></div>` : ''}
+            <div>${escapeHtml(lblUser)}: <span class="${blurClass}">${escapeHtml(u.username || u.email || '-')}</span></div>
+            <div>${escapeHtml(lblEmail)}: <span>${escapeHtml(u.email || '-')}</span></div>
+            <div>${escapeHtml(lblStatus)}: <span style="color:${statusColor}">${escapeHtml(statusText)}</span></div>
+            ${u.last_login ? `<div>${escapeHtml(lblLastLogin)}: <span>${escapeHtml(u.last_login)}</span></div>` : ''}
           </div>`;
         }).join('');
       } else {
         usersHtml = `<div class="mb-2 p-2" style="background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.08);font-size:0.8rem">
-          <div class="d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-person me-1"></i>No platform accounts</span><button class="btn btn-sm" style="background:rgba(40,167,69,0.2);color:#28a745;border:none;font-size:0.7rem;padding:2px 8px" onclick="bootstrap.Modal.getInstance(document.getElementById('keysModal'))?.hide();setTimeout(openPlatformLoginModal,300)"><i class="bi bi-box-arrow-in-right me-1"></i>Login</button></div>
+          <div class="d-flex justify-content-between align-items-center"><span class="text-muted"><i class="bi bi-person me-1"></i>${escapeHtml(lblNoAccounts)}</span><button class="btn btn-sm" style="background:rgba(40,167,69,0.2);color:#28a745;border:none;font-size:0.7rem;padding:2px 8px" onclick="bootstrap.Modal.getInstance(document.getElementById('keysModal'))?.hide();setTimeout(openPlatformLoginModal,300)"><i class="bi bi-box-arrow-in-right me-1"></i>${escapeHtml(lblLogin)}</button></div>
         </div>`;
       }
       const realKeys = keys.filter(k => k.key);
       if (!realKeys.length) {
-        container.innerHTML = usersHtml + '<p class="text-muted text-center py-3">No API keys configured.</p>';
+        container.innerHTML = usersHtml + '<p class="text-muted text-center py-3">' + escapeHtml(lblNoKeys) + '</p>';
         return;
       }
       container.innerHTML = usersHtml + realKeys.map((k, i) => {
@@ -1421,16 +1877,16 @@
         if (editingIndex === origIdx) {
           return `<div class="pool-card">
             <div class="mb-2">
-              <label class="form-label" style="font-size:10px">Name</label>
+              <label class="form-label" style="font-size:10px">${escapeHtml(lblName)}</label>
               <input type="text" class="form-control form-control-sm" id="editKeyName" value="${escapeHtml(k.name || '')}">
             </div>
             <div class="mb-2">
-              <label class="form-label" style="font-size:10px">Key</label>
+              <label class="form-label" style="font-size:10px">${escapeHtml(lblKey)}</label>
               <input type="text" class="form-control form-control-sm" id="editKey" value="${escapeHtml(k.key || '')}">
             </div>
             <div class="d-flex gap-2">
-              <button class="btn btn-sm btn-success" onclick="saveEditKey(${origIdx})"><i class="bi bi-check me-1"></i>Save</button>
-              <button class="btn btn-sm btn-secondary" onclick="cancelEditKey()"><i class="bi bi-x me-1"></i>Cancel</button>
+              <button class="btn btn-sm btn-success" onclick="saveEditKey(${origIdx})"><i class="bi bi-check me-1"></i>${escapeHtml(lblSave)}</button>
+              <button class="btn btn-sm btn-secondary" onclick="cancelEditKey()"><i class="bi bi-x me-1"></i>${escapeHtml(lblCancel)}</button>
             </div>
           </div>`;
         }
@@ -1438,20 +1894,20 @@
         const isDeleting = deleteIndex === origIdx;
         return `<div class="pool-card">
           <div class="pool-header">
-            <div class="pool-name">${escapeHtml(k.name || 'Unnamed')}</div>
+            <div class="pool-name">${escapeHtml(k.name || lblUnnamed)}</div>
             <div>
-              <button class="btn btn-sm btn-outline-action me-1" onclick="startEditKey(${origIdx})" title="Edit"><i class="bi bi-pencil"></i></button>
-              <button class="btn btn-sm" style="background:rgba(220,53,69,0.2);color:#dc3545;border:none" onclick="startDeleteKey(${origIdx})" title="Delete"><i class="bi bi-trash"></i></button>
+              <button class="btn btn-sm btn-outline-action me-1" onclick="startEditKey(${origIdx})" title="${escapeHtml(t('key_title_edit', 'Edit'))}"><i class="bi bi-pencil"></i></button>
+              <button class="btn btn-sm" style="background:rgba(220,53,69,0.2);color:#dc3545;border:none" onclick="startDeleteKey(${origIdx})" title="${escapeHtml(t('key_title_delete', 'Delete'))}"><i class="bi bi-trash"></i></button>
             </div>
           </div>
           <div style="font-size:0.8rem;color:rgba(255,255,255,0.7)">
-            <div>Key: <span class="${blurClass}" title="${escapeHtml(k.key)}">${maskedToken}</span></div>
-            <div>User: <span class="${blurClass}" title="${escapeHtml(k.platformUser || '')}">${k.platformUser || 'None'}</span></div>
+            <div>${escapeHtml(lblKey)}: <span class="${blurClass}" title="${escapeHtml(k.key)}">${maskedToken}</span></div>
+            <div>${escapeHtml(lblUser)}: <span class="${blurClass}" title="${escapeHtml(k.platformUser || '')}">${escapeHtml(k.platformUser || lblNone)}</span></div>
           </div>
-          ${isDeleting ? `<div class="mt-2 d-flex gap-2 align-items-center" style="font-size:0.85rem;color:#dc3545"><i class="bi bi-exclamation-triangle"></i> Delete this key?</div>
+          ${isDeleting ? `<div class="mt-2 d-flex gap-2 align-items-center" style="font-size:0.85rem;color:#dc3545"><i class="bi bi-exclamation-triangle"></i> ${escapeHtml(lblDeleteConfirm)}</div>
             <div class="d-flex gap-2 mt-1">
-              <button class="btn btn-sm" style="background:#dc3545;color:white;border:none" onclick="confirmDeleteKey(${origIdx})"><i class="bi bi-trash me-1"></i>Delete</button>
-              <button class="btn btn-sm btn-secondary" onclick="cancelDeleteKey()">Cancel</button>
+              <button class="btn btn-sm" style="background:#dc3545;color:white;border:none" onclick="confirmDeleteKey(${origIdx})"><i class="bi bi-trash me-1"></i>${escapeHtml(lblDelete)}</button>
+              <button class="btn btn-sm btn-secondary" onclick="cancelDeleteKey()">${escapeHtml(lblCancel)}</button>
             </div>` : ''}
         </div>`;
       }).join('');
@@ -1460,7 +1916,7 @@
     async function addKey() {
       const name = document.getElementById('newKeyName').value.trim() || ('Key ' + (document.querySelectorAll('#keysList .pool-card').length + 1));
       const key = document.getElementById('newKey').value.trim();
-      if (!key) { showToast('Key is required', 'warning'); return; }
+      if (!key) { showToast(t('toast_key_required', 'Key is required'), 'warning'); return; }
       const platformUser = (accountData?.platform_users && accountData.platform_users.length > 0)
         ? (accountData.platform_users[0].username || '') : '';
       try {
@@ -1474,12 +1930,12 @@
           document.getElementById('newKeyName').value = '';
           document.getElementById('newKey').value = '';
           renderKeysList(data.keys);
-          showToast('Key added', 'success');
+          showToast(t('toast_key_added', 'Key added'), 'success');
           loadConfiguration();
         } else {
-          showToast('Failed: ' + data.error, 'danger');
+          showToast(t('toast_failed_prefix', 'Failed:') + ' ' + data.error, 'danger');
         }
-      } catch (e) { showToast('Failed to add key', 'danger'); }
+      } catch (e) { showToast(t('toast_failed_add', 'Failed to add key'), 'danger'); }
     }
 
     function startEditKey(index) {
@@ -1512,12 +1968,12 @@
         if (data.success) {
           editingIndex = -1;
           renderKeysList(data.keys);
-          showToast('Key updated', 'success');
+          showToast(t('toast_key_updated', 'Key updated'), 'success');
           loadConfiguration();
         } else {
-          showToast('Failed: ' + data.error, 'danger');
+          showToast(t('toast_failed_prefix', 'Failed:') + ' ' + data.error, 'danger');
         }
-      } catch (e) { showToast('Failed to update key', 'danger'); }
+      } catch (e) { showToast(t('toast_failed_update', 'Failed to update key'), 'danger'); }
     }
 
     function startDeleteKey(index) {
@@ -1542,34 +1998,36 @@
         if (data.success) {
           deleteIndex = -1;
           renderKeysList(data.keys);
-          showToast('Key deleted', 'success');
+          showToast(t('toast_key_deleted', 'Key deleted'), 'success');
           loadConfiguration().then(() => syncAiWallpaperWithKeys());
         } else {
-          showToast('Failed: ' + data.error, 'danger');
+          showToast(t('toast_failed_prefix', 'Failed:') + ' ' + data.error, 'danger');
         }
-      } catch (e) { showToast('Failed to delete key', 'danger'); }
+      } catch (e) { showToast(t('toast_failed_delete', 'Failed to delete key'), 'danger'); }
     }
 
     function renderTokenPools() {
       const container = document.getElementById('tokenPoolsContainer');
       if (!proxyData || !proxyData.token_state || proxyData.token_state.length === 0) {
         container.innerHTML = `
-          <div class="text-center py-4">
-            <i class="bi bi-key" style="font-size:2rem;color:rgba(255,255,255,0.4)"></i>
-            <p class="mt-2 text-muted">No API keys detected</p>
+          <div class="text-center py-3">
+            <i class="bi bi-info-circle" style="font-size:24px;color:rgba(255,255,255,0.4)"></i>
+            <p class="mt-2 text-muted">${escapeHtml(t('tokens_none', 'No API keys detected'))}</p>
           </div>`;
         return;
       }
       document.getElementById('tokenCountBadge').textContent = proxyData.token_state.length;
       const blurClass = blurTokensEnabled ? 'token-blurred' : '';
+      const lblKey = t('label_key', 'Key');
+      const lblSession = t('label_session', 'Session');
       container.innerHTML = proxyData.token_state.map(pool => {
         const status = pool.status || 'none';
         const statusClass = status === 'active' ? 'status-online' : 'status-offline';
-        const statusText = status.charAt(0).toUpperCase() + status.slice(1);
+        const statusText = t('key_status_' + status, status.charAt(0).toUpperCase() + status.slice(1));
         const maskedPoolToken = pool.key ? pool.key.substring(0, 4) + '...' + pool.key.substring(pool.key.length - 4) : '(empty)';
         const maskedPoolSession = pool.session ? pool.session.substring(0, 4) + '...' + pool.session.substring(pool.session.length - 4) : '';
-        const sessInfo = pool.has_session ? `<div>Session: <span class="${blurClass}" title="${escapeHtml(pool.session || '')}">${maskedPoolSession}</span></div>` : '';
-        return `<div class="pool-card"><div class="pool-header"><div class="pool-name">${pool.name}</div><div class="pool-status ${statusClass}">${statusText}</div></div><div style="font-size:0.8rem;color:rgba(255,255,255,0.7)"><div>Key: <span class="${blurClass}" title="${escapeHtml(pool.key || '')}">${maskedPoolToken}</span></div>${sessInfo}</div></div>`;
+        const sessInfo = pool.has_session ? `<div>${escapeHtml(lblSession)}: <span class="${blurClass}" title="${escapeHtml(pool.session || '')}">${maskedPoolSession}</span></div>` : '';
+        return `<div class="pool-card"><div class="pool-header"><div class="pool-name">${pool.name}</div><div class="pool-status ${statusClass}">${escapeHtml(statusText)}</div></div><div style="font-size:0.8rem;color:rgba(255,255,255,0.7)"><div>${escapeHtml(lblKey)}: <span class="${blurClass}" title="${escapeHtml(pool.key || '')}">${maskedPoolToken}</span></div>${sessInfo}</div></div>`;
       }).join('');
     }
 
@@ -1579,46 +2037,57 @@
       if (!hasRealKey) {
         document.getElementById('modelCountBadge').textContent = '0';
         container.innerHTML = `
-          <div class="text-center py-4">
-            <i class="bi bi-key" style="font-size:2rem;color:rgba(255,255,255,0.4)"></i>
-            <p class="mt-2 text-muted">Add a key to see available models</p>
+          <div class="text-center py-3">
+            <i class="bi bi-info-circle" style="font-size:24px;color:rgba(255,255,255,0.4)"></i>
+            <p class="mt-2 text-muted">${escapeHtml(t('models_no_keys', 'Add a key to see available models'))}</p>
           </div>`;
         setTestChatVisible(false);
         return;
       }
       setTestChatVisible(true);
       document.getElementById('modelCountBadge').textContent = models.length;
-      if (models.length === 0) { container.innerHTML = '<p class="text-muted">No models available</p>'; return; }
+      if (models.length === 0) { container.innerHTML = '<p class="text-muted">' + escapeHtml(t('models_none', 'No models available')) + '</p>'; return; }
       const enabledSet = new Set(enabledModels || models);
       const groups = {};
       models.forEach((model, idx) => {
         let family = 'other';
-        if (model.startsWith('step-image')) family = 'step-image';
-        else if (model.startsWith('stepaudio')) family = 'stepaudio';
-        else if (model.startsWith('step')) family = 'step';
+        if (model.startsWith('agnes-image')) family = 'agnes-image';
+        else if (model.startsWith('agnes-audio')) family = 'agnes-audio';
+        else if (model.startsWith('agnes-video')) family = 'agnes-video';
+        else if (model.startsWith('agnes')) family = 'agnes';
         if (!groups[family]) groups[family] = [];
         groups[family].push({ model, idx });
       });
       const familyOrder = Object.keys(groups).sort();
+      const capReasoning = t('capability_reasoning', 'reasoning');
+      const capTools = t('capability_tools', 'tools');
+      const capVision = t('capability_vision', 'vision');
+      const capCtx = t('cap_ctx', '{n}K ctx');
       container.innerHTML = familyOrder.map(family => {
         const items = groups[family];
         return `<div class="model-family-group"><div class="model-family-header">${escapeHtml(family)} <span class="badge bg-secondary">${items.length}</span></div><div style="display:flex;flex-wrap:wrap;gap:3px">${items.map(({ model, idx }) => {
           const enabled = enabledSet.has(model);
           const meta = modelMeta[model] || {};
-          const displayName = meta.name || model;
+          let displayName = meta.name || model;
+          if (displayName === 'Agnes 2.0 Flash') displayName = t('model_name_agnes_2', displayName);
+          else if (displayName === 'Agnes 1.5 Flash') displayName = t('model_name_agnes_1_5', displayName);
           const caps = [];
-          if (meta.reasoning) caps.push('reasoning');
-          if (meta.tool_call) caps.push('tools');
-          if (meta.attachment) caps.push('vision');
+          if (meta.reasoning) caps.push(capReasoning);
+          if (meta.tool_call) caps.push(capTools);
+          if (meta.attachment) caps.push(capVision);
           if (meta.modalities) {
             const ins = (meta.modalities.input || []).filter(m => m !== 'text');
             const outs = (meta.modalities.output || []).filter(m => m !== 'text');
             if (ins.length) caps.push(ins.join('+') + ' in');
             if (outs.length) caps.push(outs.join('+') + ' out');
           }
-          if (meta.limit && meta.limit.context) caps.push((meta.limit.context / 1000) + 'K ctx');
-          const capStr = caps.length ? '<div class="model-tag-id">' + escapeHtml(caps.join(' · ')) + '</div>' : '';
-          return `<div class="model-tag${enabled ? ' enabled' : ''}" onclick="toggleModel(${idx})" id="model-${idx}"><input type="checkbox" class="form-check-input"${enabled ? ' checked' : ''}><div><div class="model-tag-name">${escapeHtml(displayName)}</div><div class="model-tag-id" title="${escapeHtml(model)}">${escapeHtml(model)}</div>${capStr}</div></div>`;
+          if (meta.limit && meta.limit.context) caps.push(capCtx.replace('{n}', (meta.limit.context / 1000)));
+          const sep = '<span class="model-tag-sep"></span>';
+          const parts = ['<span class="model-tag-name">' + escapeHtml(displayName) + '</span>'];
+          parts.push('<span class="model-tag-id" title="' + escapeHtml(model) + '">' + escapeHtml(model) + '</span>');
+          caps.forEach(c => parts.push('<span class="model-tag-id">' + escapeHtml(c) + '</span>'));
+          const inner = parts.join(sep);
+          return `<div class="model-tag${enabled ? ' enabled' : ''}" onclick="toggleModel(${idx})" id="model-${idx}"><input type="checkbox" class="form-check-input"${enabled ? ' checked' : ''}><div class="model-tag-row">${inner}</div></div>`;
         }).join('')}</div></div>`;
       }).join('');
     }
@@ -1631,12 +2100,13 @@
       else { tag.classList.add('enabled'); checkbox.checked = true; }
       const enabledModels = models.filter((_, i) => document.getElementById(`model-${i}`).classList.contains('enabled'));
       const displayName = (modelMeta[models[idx]] || {}).name || models[idx];
-      showToast(`${displayName} ${isEnabled ? 'disabled' : 'enabled'}`, 'info');
+      const stateLabel = isEnabled ? t('model_disabled', 'disabled') : t('model_enabled', 'enabled');
+      showToast(`${displayName} ${stateLabel}`, 'info');
       try {
         const resp = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabledModels }) });
         const data = await resp.json();
-        if (!data.success) showToast('Failed to save model settings', 'danger');
-      } catch (e) { showToast('Failed to save model settings', 'danger'); }
+        if (!data.success) showToast(t('model_saved_fail', 'Failed to save model settings'), 'danger');
+      } catch (e) { showToast(t('model_saved_fail', 'Failed to save model settings'), 'danger'); }
     }
 
     function toggleBlurTokens(checked) {
@@ -1651,17 +2121,17 @@
         if (data.ok) {
           proxyData = data;
           document.getElementById('statusIndicator').className = 'status-indicator status-online';
-          document.getElementById('statusText').textContent = data.test_mode ? 'Test' : 'Online';
+          document.getElementById('statusText').textContent = data.test_mode ? t('status_test', 'Test') : t('status_online', 'Online');
           renderTokenPools();
           updateStats();
-          if (!silent) showToast('Proxy is healthy', 'success');
+          if (!silent) showToast(t('toast_proxy_healthy', 'Proxy is healthy'), 'success');
         } else {
           throw new Error('Unhealthy status');
         }
       } catch (error) {
         document.getElementById('statusIndicator').className = 'status-indicator status-offline';
-        document.getElementById('statusText').textContent = 'Offline';
-        if (!silent) showToast('Proxy health check failed', 'danger');
+        document.getElementById('statusText').textContent = t('status_offline', 'Offline');
+        if (!silent) showToast(t('toast_health_failed', 'Proxy health check failed'), 'danger');
       }
     }
 
@@ -1670,18 +2140,19 @@
         const response = await fetch('/v1/models');
         if (response.ok) {
           const data = await response.json();
-          showToast(`Connected! ${data.data?.length || 0} models available`, 'success');
+          const msg = t('toast_connected', 'Connected! {n} models available').replace('{n}', data.data?.length || 0);
+          showToast(msg, 'success');
         } else {
           throw new Error('Connection failed');
         }
       } catch (error) {
-        showToast('Connection test failed', 'danger');
+        showToast(t('toast_connection_failed', 'Connection test failed'), 'danger');
       }
     }
 
     function refreshModels() {
       loadConfiguration();
-      showToast('Models refreshed', 'info');
+      showToast(t('toast_models_refreshed', 'Models refreshed'), 'info');
     }
 
     function hideAllModals() {
@@ -1702,7 +2173,11 @@
       document.getElementById('platLoginPassword').value = '';
       document.getElementById('platLoginStatus').style.display = 'none';
       const title = document.querySelector('#platformLoginModal .modal-title');
-      if (title) title.innerHTML = _loginMode === 'addAccount' ? '<i class="bi bi-person-plus-fill me-2"></i>Add Platform Account' : '<i class="bi bi-person-fill me-2"></i>Platform Login';
+      if (title) {
+        const label = _loginMode === 'addAccount' ? t('modal_add_platform_account', 'Add Platform Account') : t('modal_platform_login', 'Platform Login');
+        const icon = _loginMode === 'addAccount' ? 'bi-person-plus-fill' : 'bi-person-fill';
+        title.innerHTML = '<i class="bi ' + icon + ' me-2"></i>' + escapeHtml(label);
+      }
       const platModalEl = document.getElementById('platformLoginModal');
       const existing = bootstrap.Modal.getInstance(platModalEl);
       if (existing) existing.show();
@@ -1713,29 +2188,37 @@
       const username = document.getElementById('platLoginUsername').value.trim();
       const password = document.getElementById('platLoginPassword').value;
       const statusEl = document.getElementById('platLoginStatus');
-      if (!username || !password) { statusEl.style.display = 'block'; statusEl.innerHTML = '<small class="text-danger">Username and password are required</small>'; return; }
+      if (!username || !password) {
+        statusEl.style.display = 'block';
+        statusEl.innerHTML = '<small class="text-danger">' + escapeHtml(t('toast_required_fields', 'Username and password are required')) + '</small>';
+        return;
+      }
       statusEl.style.display = 'block';
-      statusEl.innerHTML = '<small class="text-info">Logging in...</small>';
+      statusEl.innerHTML = '<small class="text-info">' + escapeHtml(t('toast_logging_in', 'Logging in...')) + '</small>';
       try {
         const loginResp = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
         const loginData = await loginResp.json();
         if (loginData.success) {
-          statusEl.innerHTML = '<small class="text-success">Logged in as ' + (loginData.user?.email || username) + '</small>';
-          showToast('Platform login successful', 'success');
+          const loggedInTpl = t('toast_logged_in_as', 'Logged in as {email}');
+          const loggedInMsg = loggedInTpl.replace('{email}', loginData.user?.email || username);
+          statusEl.innerHTML = '<small class="text-success">' + escapeHtml(loggedInMsg) + '</small>';
+          showToast(t('toast_login_success', 'Platform login successful'), 'success');
           setTimeout(() => {
             hideAllModals();
             checkHealth(true);
-            fetchStepPlanStatus();
+            fetchPlanStatus();
             openApplyKeyModal();
           }, 800);
         } else {
-          const errMsg = loginData.error || 'unknown';
-          statusEl.innerHTML = '<small class="text-danger">Login failed: ' + errMsg + '</small>';
-          showToast('Login failed: ' + errMsg, 'danger');
+          const errMsg = loginData.error || t('unknown_error', 'unknown');
+          const failTpl = t('toast_login_failed_prefix', 'Login failed:');
+          statusEl.innerHTML = '<small class="text-danger">' + escapeHtml(failTpl + ' ' + errMsg) + '</small>';
+          showToast(failTpl + ' ' + errMsg, 'danger');
         }
       } catch (e) {
-        statusEl.innerHTML = '<small class="text-danger">Error: ' + e.message + '</small>';
-        showToast('Login error: ' + e.message, 'danger');
+        const errTpl = t('toast_error_prefix', 'Error:');
+        statusEl.innerHTML = '<small class="text-danger">' + escapeHtml(errTpl + ' ' + e.message) + '</small>';
+        showToast(errTpl + ' ' + e.message, 'danger');
       }
     }
 
@@ -1758,8 +2241,9 @@
       const confirmBtn = document.getElementById('applyKeyConfirmBtn');
       statusEl.style.display = 'none';
       confirmBtn.disabled = true;
-      content.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-light" role="status"></div><div class="mt-2 text-muted" style="font-size:12px">Loading keys from platform...</div></div>';
-      subtitle.textContent = 'Select an API key from your account to apply.';
+      const loadingTpl = t('loading_keys_from_platform', 'Loading keys from platform...');
+      content.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-light" role="status"></div><div class="mt-2 text-muted" style="font-size:12px">' + escapeHtml(loadingTpl) + '</div></div>';
+      subtitle.textContent = t('apply_key_subtitle', 'Select an API key from your account to apply.');
       const modalEl = document.getElementById('applyKeyModal');
       const existing = bootstrap.Modal.getInstance(modalEl);
       if (existing) existing.show();
@@ -1767,38 +2251,43 @@
       try {
         const resp = await fetch('/api/platform/keys');
         const data = await resp.json();
-        if (!resp.ok) throw new Error(data.error || 'Failed to load keys');
+        if (!resp.ok) throw new Error(data.error || t('toast_failed_load_keys', 'Failed to load keys'));
         const keys = data.keys || [];
         _applyKeyCache = keys;
-        _applyKeyPlanName = data.plan_name || 'Default';
+        _applyKeyPlanName = data.plan_name || t('default_name', 'Default');
         _applyKeyUsername = data.username || '';
         if (keys.length === 0) {
-          content.innerHTML = '<div class="text-muted text-center py-3" style="font-size:12px">No keys found on your account.</div>';
+          content.innerHTML = '<div class="text-muted text-center py-3" style="font-size:12px">' + escapeHtml(t('apply_key_no_keys', 'No keys found on your account.')) + '</div>';
           return;
         }
+        const lblActive = t('apply_key_active', 'Active');
         const optionsHtml = keys.map((k, i) => {
-          const planLabel = (k.plan_name && k.plan_name.trim()) ? k.plan_name : 'Default';
+          const planLabel = (k.plan_name && k.plan_name.trim()) ? k.plan_name : t('default_name', 'Default');
           const displayName = sanitizeKeyName(k.plan_name || planLabel, data.username || _applyKeyUsername);
           const preview = k.preview || (k.full_key ? k.full_key.substring(0, 8) + '…' : '—');
           const statusDot = k.status === 'active'
-            ? '<span class="badge ms-2" style="background:rgba(40,167,69,0.25);color:#28a745;font-size:9px;padding:2px 6px">Active</span>'
+            ? '<span class="badge ms-2" style="background:rgba(40,167,69,0.25);color:#28a745;font-size:9px;padding:2px 6px">' + escapeHtml(lblActive) + '</span>'
             : (k.status ? `<span class="badge bg-secondary ms-2" style="font-size:9px;padding:2px 6px">${escapeHtml(k.status)}</span>` : '');
           return `<option value="${i}">${escapeHtml(displayName)} — ${escapeHtml(preview)}${statusDot}</option>`;
         }).join('');
         const firstKey = keys[0];
+        const lblAvailable = t('apply_key_available', 'Available Keys');
+        const lblValue = t('apply_key_value', 'Key Value');
+        const lblSavedAs = t('apply_key_saved_as', 'Saved as: {name}');
+        const lblFetching = t('apply_key_fetching', 'Fetching full key...');
         content.innerHTML = `
           <div class="mb-2">
-            <label class="form-label" style="font-size:12px">Available Keys</label>
+            <label class="form-label" style="font-size:12px">${escapeHtml(lblAvailable)}</label>
             <select class="form-select form-select-sm" id="applyKeySelect" onchange="onApplyKeySelectChange()">
               ${optionsHtml}
             </select>
           </div>
           <div class="mb-2">
-            <label class="form-label" style="font-size:12px">Key Value</label>
-            <input type="text" class="form-control form-control-sm" id="applyKeyValue" value="" readonly placeholder="fetching..." data-last-idx="0">
+            <label class="form-label" style="font-size:12px">${escapeHtml(lblValue)}</label>
+            <input type="text" class="form-control form-control-sm" id="applyKeyValue" value="" readonly placeholder="${escapeHtml(lblFetching)}" data-last-idx="0">
           </div>
-          <small class="text-muted d-block mb-1" style="font-size:10px">Saved as: <span id="applyKeyPreview" style="color:rgba(255,255,255,0.8)">${escapeHtml(sanitizeKeyName(firstKey.plan_name || 'Default', data.username || _applyKeyUsername))}</span></small>
-          <small class="d-block mb-1" style="font-size:10px;color:rgba(255,255,255,0.5)" id="applyKeyHint">Fetching full key...</small>
+          <small class="text-muted d-block mb-1" style="font-size:10px">${escapeHtml(lblSavedAs.replace('{name}', '<span id="applyKeyPreview" style="color:rgba(255,255,255,0.8)">' + escapeHtml(sanitizeKeyName(firstKey.plan_name || t('default_name', 'Default'), data.username || _applyKeyUsername)) + '</span>'))}</small>
+          <small class="d-block mb-1" style="font-size:10px;color:rgba(255,255,255,0.5)" id="applyKeyHint">${escapeHtml(lblFetching)}</small>
         `;
         confirmBtn.disabled = false;
         setTimeout(() => {
@@ -1821,9 +2310,9 @@
       const preview = document.getElementById('applyKeyPreview');
       const hint = document.getElementById('applyKeyHint');
       const confirmBtn = document.getElementById('applyKeyConfirmBtn');
-      const proposed = sanitizeKeyName(key.plan_name || 'Default', _applyKeyUsername);
+      const proposed = sanitizeKeyName(key.plan_name || t('default_name', 'Default'), _applyKeyUsername);
       preview.textContent = proposed;
-      hint.textContent = 'Fetching key...';
+      hint.textContent = t('apply_key_fetching', 'Fetching full key...');
       hint.style.color = 'rgba(255,255,255,0.5)';
       valueInput.value = '';
       confirmBtn.disabled = true;
@@ -1833,14 +2322,14 @@
         const d = await r.json();
         if (d.key) {
           valueInput.value = d.key;
-          hint.textContent = 'Key loaded.';
+          hint.textContent = t('apply_key_loaded', 'Key loaded.');
           hint.style.color = '#28a745';
         } else {
-          hint.textContent = d.error || 'No key returned — paste it below.';
+          hint.textContent = d.error || t('apply_key_fetch_failed', 'Fetch failed — paste it below.');
           hint.style.color = '#dc3545';
         }
       } catch (e) {
-        hint.textContent = 'Fetch failed — paste it below.';
+        hint.textContent = t('apply_key_fetch_failed', 'Fetch failed — paste it below.');
         hint.style.color = '#dc3545';
       }
       confirmBtn.disabled = false;
@@ -1857,16 +2346,21 @@
       confirmBtn.disabled = true;
       statusEl.style.display = 'block';
       const key = _applyKeyCache[idx];
-      if (!key) { statusEl.innerHTML = '<small class="text-danger">Invalid selection</small>'; confirmBtn.disabled = false; return; }
-      const planLabel = (key.plan_name && key.plan_name.trim()) ? key.plan_name : 'Default';
-      const tokenName = sanitizeKeyName(planLabel, _applyKeyUsername);
-      const tokenValue = rawKey;
-      if (!tokenValue) {
-        statusEl.innerHTML = '<small class="text-warning">Select a key first — wait for it to load, or paste one below.</small>';
+      if (!key) {
+        statusEl.innerHTML = '<small class="text-danger">' + escapeHtml(t('apply_key_invalid', 'Invalid selection')) + '</small>';
         confirmBtn.disabled = false;
         return;
       }
-      statusEl.innerHTML = '<small class="text-info">Saving ' + escapeHtml(tokenName) + '...</small>';
+      const planLabel = (key.plan_name && key.plan_name.trim()) ? key.plan_name : t('default_name', 'Default');
+      const tokenName = sanitizeKeyName(planLabel, _applyKeyUsername);
+      const tokenValue = rawKey;
+      if (!tokenValue) {
+        statusEl.innerHTML = '<small class="text-warning">' + escapeHtml(t('apply_key_select_first', 'Select a key first — wait for it to load, or paste one below.')) + '</small>';
+        confirmBtn.disabled = false;
+        return;
+      }
+      const savingTpl = t('apply_key_saving', 'Saving {name}...');
+      statusEl.innerHTML = '<small class="text-info">' + escapeHtml(savingTpl.replace('{name}', tokenName)) + '</small>';
       try {
         const kr = await fetch('/api/keys');
         const kd = await kr.json();
@@ -1881,7 +2375,8 @@
           const ui = await fetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', index: existingIdx, name: tokenName, platformUser: _applyKeyUsername }) });
           const ud = await ui.json();
           if (ud.success) {
-            showToast('Key updated: ' + escapeHtml(tokenName), 'success');
+            const tpl = t('apply_key_updated', 'Key updated: {name}');
+            showToast(tpl.replace('{name}', escapeHtml(tokenName)), 'success');
             fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallpaperMode: 'ai' }) }).catch(() => {});
             const wpAi = document.getElementById('wp-ai');
             if (wpAi) wpAi.checked = true;
@@ -1892,17 +2387,21 @@
         const addResp = await fetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', name: tokenName, key: tokenValue, platformUser: _applyKeyUsername }) });
         const addData = await addResp.json();
         if (addData.success) {
-          showToast('Key added: ' + escapeHtml(tokenName), 'success');
+          const tpl = t('apply_key_added', 'Key added: {name}');
+          showToast(tpl.replace('{name}', escapeHtml(tokenName)), 'success');
           fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallpaperMode: 'ai' }) }).catch(() => {});
           const wpAi = document.getElementById('wp-ai');
           if (wpAi) wpAi.checked = true;
           loadConfiguration().then(() => { hideAllModals(); checkHealth(true); openKeysModal(); });
         } else {
-          statusEl.innerHTML = '<small class="text-danger">Failed: ' + escapeHtml(addData.error || 'unknown') + '</small>';
+          const failTpl = t('toast_failed_prefix', 'Failed:');
+          const unk = t('unknown_error', 'unknown');
+          statusEl.innerHTML = '<small class="text-danger">' + escapeHtml(failTpl + ' ' + (addData.error || unk)) + '</small>';
           confirmBtn.disabled = false;
         }
       } catch (e) {
-        statusEl.innerHTML = '<small class="text-danger">Error: ' + escapeHtml(e.message) + '</small>';
+        const errTpl = t('toast_error_prefix', 'Error:');
+        statusEl.innerHTML = '<small class="text-danger">' + escapeHtml(errTpl + ' ' + e.message) + '</small>';
         confirmBtn.disabled = false;
       }
     }
@@ -1912,7 +2411,7 @@
       if (!platformLogged.logged_in) {
         bootstrap.Modal.getInstance(document.getElementById('keysModal'))?.hide();
         setTimeout(openPlatformLoginModal, 300);
-        showToast('Login to platform first to retrieve tokens', 'warning');
+        showToast(t('toast_login_first_retrieve', 'Login to platform first to retrieve tokens'), 'warning');
         return;
       }
       bootstrap.Modal.getInstance(document.getElementById('keysModal'))?.hide();
@@ -1926,33 +2425,37 @@
         const data = await r.json();
         if (data.success) {
           accountData = null;
-          showToast('Logged out', 'success');
-          fetchStepPlanStatus();
+          showToast(t('toast_logout', 'Logged out'), 'success');
+          fetchPlanStatus();
           openKeysModal();
           syncAiWallpaperWithKeys();
         }
       } catch (e) {
-        showToast('Logout failed', 'danger');
+        showToast(t('toast_logout_failed', 'Logout failed'), 'danger');
       }
     }
 
     async function removePlatformUser(username) {
-      if (!confirm('Logout and remove platform user "' + username + '"? This will unlink the account from all keys.')) return;
+      const tpl = t('remove_confirm', 'Logout and remove platform user "{user}"? This will unlink the account from all keys.');
+      if (!confirm(tpl.replace('{user}', username))) return;
       try {
         const r = await fetch('/api/logout', { method: 'POST' });
         const data = await r.json();
         if (data.success) {
           accountData = null;
-          showToast('Logged out and removed: ' + escapeHtml(username), 'success');
+          const tpl2 = t('toast_logout_removed', 'Logged out and removed: {user}');
+          showToast(tpl2.replace('{user}', escapeHtml(username)), 'success');
           await loadConfiguration();
           await syncAiWallpaperWithKeys();
-          await fetchStepPlanStatus();
+          await fetchPlanStatus();
           openKeysModal();
         } else {
-          showToast('Failed: ' + (data.error || 'unknown'), 'danger');
+          const failTpl = t('toast_failed_prefix', 'Failed:');
+          showToast(failTpl + ' ' + (data.error || t('unknown_error', 'unknown')), 'danger');
         }
       } catch (e) {
-        showToast('Error: ' + e.message, 'danger');
+        const errTpl = t('toast_error_prefix', 'Error:');
+        showToast(errTpl + ' ' + e.message, 'danger');
       }
     }
 
@@ -1966,7 +2469,7 @@
       }
     }
 
-    let stepPlanData = null;
+    let planData = null;
     let planSlides = [];
     let currentSlide = 0;
     let keyPlanDataCache = [];
@@ -1980,7 +2483,7 @@
       const nameEl = document.getElementById('planName' + p);
       const expiryEl = document.getElementById('planExpiry' + p);
       if (sub) {
-        const name = sub.name || sub.plan_name || 'Free Plan';
+        const name = sub.name || sub.plan_name || t('plan_free_plan', 'Free Plan');
         const periodEnd = sub.current_period_end;
         if (nameEl) { nameEl.textContent = name; nameEl.style.color = sub.status === 'active' ? '#32CD32' : ''; nameEl.setAttribute('title', `${name} - ${sub.status}`); }
         if (periodEnd && expiryEl) {
@@ -1989,15 +2492,16 @@
             const d = Math.floor(msLeft / 86400000);
             const h = Math.floor((msLeft % 86400000) / 3600000);
             const m = Math.floor((msLeft % 3600000) / 60000);
-            expiryEl.textContent = `${d}d ${h}h ${m}m left`;
+            const tpl = t('duration_left', '{d}d {h}h {m}m left');
+            expiryEl.textContent = tpl.replace('{d}', d).replace('{h}', h).replace('{m}', m);
             expiryEl.style.color = 'rgba(255,255,255,0.45)';
           } else {
-            expiryEl.textContent = 'expired';
+            expiryEl.textContent = t('plan_expired', 'expired');
             expiryEl.style.color = '#dc3545';
           }
         }
       } else {
-        if (nameEl) { nameEl.textContent = 'Free Access'; nameEl.style.color = ''; nameEl.removeAttribute('title'); }
+        if (nameEl) { nameEl.textContent = t('plan_free_access', 'Free Access'); nameEl.style.color = ''; nameEl.removeAttribute('title'); }
         if (expiryEl) expiryEl.textContent = '';
       }
       const weekly = data.weekly;
@@ -2025,7 +2529,9 @@
           const d = Math.floor(secs / 86400);
           const h = Math.floor((secs % 86400) / 3600);
           const m = Math.floor((secs % 3600) / 60);
-          fiveResetEl.textContent = 'Refreshes in ' + (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
+          const timeStr = (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
+          const tpl = t('refreshes_in', 'Refreshes in {time}');
+          fiveResetEl.textContent = tpl.replace('{time}', timeStr);
         }
       }
       if (weekEl) { weekEl.innerHTML = '<strong>' + weeklyUsedPct.toFixed(1) + '%</strong>'; }
@@ -2042,7 +2548,9 @@
         const d = Math.floor(secs / 86400);
         const h = Math.floor((secs % 86400) / 3600);
         const m = Math.floor((secs % 3600) / 60);
-        weekResetEl.textContent = 'Refreshes in ' + (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
+        const timeStr = (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
+        const tpl = t('refreshes_in', 'Refreshes in {time}');
+        weekResetEl.textContent = tpl.replace('{time}', timeStr);
       }
     }
 
@@ -2078,7 +2586,7 @@
         nameEl.style.color = '';
         nameEl.setAttribute('title', displayName);
       } else {
-        nameEl.textContent = 'Free Access';
+        nameEl.textContent = t('plan_free_access', 'Free Access');
         nameEl.style.color = '';
         nameEl.removeAttribute('title');
       }
@@ -2090,11 +2598,12 @@
           const d = Math.floor(msLeft / 86400000);
           const h = Math.floor((msLeft % 86400000) / 3600000);
           const m = Math.floor((msLeft % 3600000) / 60000);
-          expiryEl.textContent = `${d}d ${h}h ${m}m left`;
+          const tpl = t('duration_left', '{d}d {h}h {m}m left');
+          expiryEl.textContent = tpl.replace('{d}', d).replace('{h}', h).replace('{m}', m);
           expiryEl.style.color = 'rgba(255,255,255,0.45)';
           expiryEl.style.display = '';
         } else {
-          expiryEl.textContent = 'expired';
+          expiryEl.textContent = t('plan_expired', 'expired');
           expiryEl.style.color = '#dc3545';
           expiryEl.style.display = '';
         }
@@ -2119,7 +2628,9 @@
           const d = Math.floor(secs / 86400);
           const h = Math.floor((secs % 86400) / 3600);
           const m = Math.floor((secs % 3600) / 60);
-          fiveResetEl.textContent = 'Refreshes in ' + (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
+          const timeStr = (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
+          const tpl = t('refreshes_in', 'Refreshes in {time}');
+          fiveResetEl.textContent = tpl.replace('{time}', timeStr);
         }
         const weeklyPct = totalWeeklyLimit > 0 ? (totalWeeklyUsed / totalWeeklyLimit) * 100 : 0;
         document.getElementById('weeklyUsage').innerHTML = '<strong>' + weeklyPct.toFixed(1) + '%</strong>';
@@ -2135,7 +2646,9 @@
           const d = Math.floor(secs / 86400);
           const h = Math.floor((secs % 86400) / 3600);
           const m = Math.floor((secs % 3600) / 60);
-          weekResetEl.textContent = 'Refreshes in ' + (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
+          const timeStr = (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
+          const tpl = t('refreshes_in', 'Refreshes in {time}');
+          weekResetEl.textContent = tpl.replace('{time}', timeStr);
         }
         const fiveBar = document.getElementById('fiveHourBar');
         const weekBar = document.getElementById('weeklyBar');
@@ -2149,7 +2662,7 @@
     function buildSlideHTML(idx) {
       const p = '_' + idx;
       return `<div class="row text-center align-items-stretch">
-        <div class="col-4"><div class="stats-card card h-100 d-flex flex-column" data-glass><div class="card-content flex-grow-1 justify-content-center d-flex flex-column" style="padding:8px"><div class="stats-value" id="planName${p}" title="Loading...">Loading...</div><div class="stats-label">Plan</div><div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:4px" id="planExpiry${p}">--</div></div></div></div>
+        <div class="col-4"><div class="stats-card card h-100 d-flex flex-column" data-glass><div class="card-content flex-grow-1 justify-content-center d-flex flex-column" style="padding:8px"><div class="stats-value" id="planName${p}" title="${escapeHtml(t('plan_loading', 'Loading...'))}">${escapeHtml(t('plan_loading', 'Loading...'))}</div><div class="stats-label">${escapeHtml(t('plan_label', 'Plan'))}</div><div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:4px" id="planExpiry${p}">--</div></div></div></div>
         <div class="col-4"><div class="stats-card card h-100 d-flex flex-column" data-glass><div class="card-content flex-grow-1 justify-content-center d-flex flex-column" style="padding:8px"><div class="usage-display"><div class="usage-text" id="fiveHourUsage${p}">--</div><div class="stats-label">5h Usage</div><div class="usage-bar-container"><div class="usage-bar-fill" id="fiveHourBar${p}" style="width:0%"></div><div class="usage-bar-text" id="fiveHourBarText${p}"></div></div><div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:4px" id="fiveHourReset${p}">--</div></div></div></div></div>
         <div class="col-4"><div class="stats-card card h-100 d-flex flex-column" data-glass><div class="card-content flex-grow-1 justify-content-center d-flex flex-column" style="padding:8px"><div class="usage-display"><div class="usage-text" id="weeklyUsage${p}">--</div><div class="stats-label">Weekly Usage</div><div class="usage-bar-container"><div class="usage-bar-fill" id="weeklyBar${p}" style="width:0%"></div><div class="usage-bar-text" id="weeklyBarText${p}"></div></div><div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:4px" id="weeklyReset${p}">--</div></div></div></div></div>
       </div>`;
@@ -2168,7 +2681,7 @@
       }
     }
 
-    async function fetchStepPlanStatus() {
+    async function fetchPlanStatus() {
       const fieldset = document.getElementById('planFieldset');
       if (!fieldset) return;
 
@@ -2180,10 +2693,10 @@
       let hasAnyKeys = false;
       try {
         const [planResp, keysResp] = await Promise.all([
-          fetch('/api/get-plan-status?t=' + Date.now() + '&_=' + Math.random()),
+          fetch('/api/plan-status?t=' + Date.now() + '&_=' + Math.random()),
           fetch('/api/keys')
         ]);
-        if (planResp.ok) { realData = await planResp.json(); stepPlanData = realData; }
+        if (planResp.ok) { realData = await planResp.json(); planData = realData; }
         if (keysResp.ok) { const kd = await keysResp.json(); hasAnyKeys = !!(kd.safe && kd.safe.some(s => s.has_key || s.has_token)); }
       } catch (e) {}
 
@@ -2226,18 +2739,19 @@
         const expiryEl = document.getElementById('planExpiry');
         const sub = realData.subscription;
         if (sub) {
-          if (nameEl) { nameEl.textContent = sub.name || sub.plan_name || 'Free Plan'; nameEl.removeAttribute('title'); nameEl.style.color = ''; }
+          if (nameEl) { nameEl.textContent = sub.name || sub.plan_name || t('plan_free_plan', 'Free Plan'); nameEl.removeAttribute('title'); nameEl.style.color = ''; }
           if (sub.current_period_end && expiryEl) {
             const msLeft = (new Date(sub.current_period_end).getTime()) - Date.now();
             if (msLeft > 0) {
               const d = Math.floor(msLeft / 86400000);
               const h = Math.floor((msLeft % 86400000) / 3600000);
               const m = Math.floor((msLeft % 3600000) / 60000);
-              expiryEl.textContent = d + 'd ' + h + 'h ' + m + 'm left';
+              const tpl = t('duration_left', '{d}d {h}h {m}m left');
+              expiryEl.textContent = tpl.replace('{d}', d).replace('{h}', h).replace('{m}', m);
               expiryEl.style.color = 'rgba(255,255,255,0.45)';
               expiryEl.style.display = '';
             } else {
-              expiryEl.textContent = 'expired';
+              expiryEl.textContent = t('plan_expired', 'expired');
               expiryEl.style.color = '#dc3545';
               expiryEl.style.display = '';
             }
@@ -2260,7 +2774,9 @@
             const d = Math.floor(secs / 86400);
             const h = Math.floor((secs % 86400) / 3600);
             const m = Math.floor((secs % 3600) / 60);
-            fiveResetEl.textContent = 'Refreshes in ' + (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
+            const timeStr = (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
+            const tpl = t('refreshes_in', 'Refreshes in {time}');
+            fiveResetEl.textContent = tpl.replace('{time}', timeStr);
           }
         }
         const wk = realData.weekly;
@@ -2278,7 +2794,9 @@
             const d = Math.floor(secs / 86400);
             const h = Math.floor((secs % 86400) / 3600);
             const m = Math.floor((secs % 3600) / 60);
-            weekResetEl.textContent = 'Refreshes in ' + (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
+            const timeStr = (d > 0 ? d + 'd ' : '') + h + 'h ' + m + 'm';
+            const tpl = t('refreshes_in', 'Refreshes in {time}');
+            weekResetEl.textContent = tpl.replace('{time}', timeStr);
           }
         }
 
@@ -2296,11 +2814,11 @@
         // No plan — populate the top 3-column black category card with "Free Access",
         // and show the detailed no-plan info as an additional black card below.
         const loggedIn = realData?.logged_in;
-        const statusLine = loggedIn ? 'Free Access' : 'No key configured';
+        const statusLine = loggedIn ? t('plan_free_access', 'Free Access') : t('plan_no_key', 'No key configured');
         const planNameEl = document.getElementById('planName');
         const planExpiryEl = document.getElementById('planExpiry');
         const planLegendEl = document.getElementById('planLegend');
-        if (planLegendEl) { planLegendEl.textContent = 'Free mode'; planLegendEl.title = ''; }
+        if (planLegendEl) { planLegendEl.textContent = t('plan_free_mode', 'Free mode'); planLegendEl.title = ''; }
         // Hide the entire plan stats row (Free Access block + fake usage dashboard) when no plan
         const planCol = document.getElementById('planColumn');
         const fiveCol = document.getElementById('fiveHourColumn');
@@ -2317,28 +2835,28 @@
         if (existing) existing.remove();
         const cardHtml = !hasAnyKeys
             ? `<div class="no-plan-card" style="position:relative;z-index:5">
-              <h5>${statusLine}</h5>
+              <h5>${escapeHtml(statusLine)}</h5>
               <ul>
-                <li><strong>Indefinitely Free:</strong><br>The proprietary baseline models — such as Agnes-2.0-Flash — are free to use without a time trial or credit card.</li>
-                <li><strong>Rate Limits:</strong><br>Free tier: 20 req/min. Paid plans have a 5-hour request limit:<br>Starter: 1,500 / 5h<br>Plus: 7,500 / 5h<br>Pro: 30,000 / 5h</li>
+                <li><strong>${escapeHtml(t('no_plan_indef_free', 'Indefinitely Free:'))}</strong><br>${escapeHtml(t('no_plan_indef_free_body', 'The proprietary baseline models — such as Agnes-2.0-Flash — are free to use without a time trial or credit card.'))}</li>
+                <li><strong>${escapeHtml(t('no_plan_rate_limits', 'Rate Limits:'))}</strong><br>${escapeHtml(t('no_plan_rate_body', 'Free tier: 8 RPM (Request Per Minute). Paid plans have a 5-hour request limit:'))}<br>${escapeHtml(t('no_plan_starter', 'Starter: 1,500 / 5h'))}<br>${escapeHtml(t('no_plan_plus', 'Plus: 7,500 / 5h'))}<br>${escapeHtml(t('no_plan_pro', 'Pro: 30,000 / 5h'))}</li>
               </ul>
-              <p class="subscribe-text">Consider subscribing to keep the service up and available for everyone if you like it.</p>
-              <a href="https://platform.agnes-ai.com/subscribe/subscription?from=dashboard" target="_blank">View Plans &amp; Pricing</a>
+              <p class="subscribe-text">${escapeHtml(t('no_plan_consider', 'Consider subscribing to keep the service up and available for everyone if you like it.'))}</p>
+              <a href="https://platform.agnes-ai.com/subscribe/subscription?from=dashboard" target="_blank">${escapeHtml(t('no_plan_view_plans', 'View Plans & Pricing'))}</a>
             </div>`
           : loggedIn
           ? `<div class="no-plan-card" style="position:relative;z-index:5">
-                <h5>${statusLine}</h5>
-                <p>You're logged in but don't have an active subscription. The free tier provides access to all models, but with a 20 RPM limit.</p>
-                <p class="subscribe-text">Subscribe for higher rate limits and premium models.</p>
-                <a href="https://platform.agnes-ai.com/subscribe/subscription?from=dashboard" target="_blank" style="margin-right:12px">View Plans &amp; Pricing</a>
-                <button class="btn btn-outline-action" onclick="platformLogout()" style="font-size:12px"><i class="bi bi-box-arrow-right me-1"></i>Logout</button>
+                <h5>${escapeHtml(statusLine)}</h5>
+                <p>${escapeHtml(t('no_plan_logged_in_body', "You're logged in but don't have an active subscription. The free tier provides access to all models, but with a RPM (Request Per Minute) limit of 8."))}</p>
+                <p class="subscribe-text">${escapeHtml(t('no_plan_subscribe_text', 'Subscribe for higher rate limits and premium models.'))}</p>
+                <a href="https://platform.agnes-ai.com/subscribe/subscription?from=dashboard" target="_blank" style="margin-right:12px">${escapeHtml(t('no_plan_view_plans', 'View Plans & Pricing'))}</a>
+                <button class="btn btn-outline-action" onclick="platformLogout()" style="font-size:12px"><i class="bi bi-box-arrow-right me-1"></i>${escapeHtml(t('btn_logout', 'Logout'))}</button>
               </div>`
             : `<div class="no-plan-card" style="position:relative;z-index:5">
-                <h5>${statusLine}</h5>
-                <p>Log in to your Agnes AI account to see subscription details, usage stats, and manage your plan.</p>
-                <button class="btn btn-outline-action" onclick="openPlatformLoginModal()" style="margin-bottom:12px"><i class="bi bi-person-fill me-1"></i>Login to Platform</button>
-                <p class="subscribe-text">Don't have an account?</p>
-                <a href="https://platform.agnes-ai.com/subscribe/subscription?from=dashboard" target="_blank">View Plans &amp; Pricing</a>
+                <h5>${escapeHtml(statusLine)}</h5>
+                <p>${escapeHtml(t('no_plan_login_body', 'Log in to your Agnes AI account to see subscription details, usage stats, and manage your plan.'))}</p>
+                <button class="btn btn-outline-action" onclick="openPlatformLoginModal()" style="margin-bottom:12px"><i class="bi bi-person-fill me-1"></i>${escapeHtml(t('btn_login_to_platform', 'Login to Platform'))}</button>
+                <p class="subscribe-text">${escapeHtml(t('no_plan_no_account', "Don't have an account?"))}</p>
+                <a href="https://platform.agnes-ai.com/subscribe/subscription?from=dashboard" target="_blank">${escapeHtml(t('no_plan_view_plans', 'View Plans & Pricing'))}</a>
               </div>`;
         const wrap = document.createElement('div');
         wrap.className = 'no-plan-card-wrap';
@@ -2405,7 +2923,7 @@
     Promise.all([
       loadConfiguration(),
       checkHealth(),
-      fetchStepPlanStatus(),
+      fetchPlanStatus(),
     ]).then(async () => {
       await syncAiWallpaperWithKeys();
       await probeApiKey();
@@ -2414,7 +2932,7 @@
       setTimeout(() => window.dispatchEvent(new Event('resize')), 3000);
     });
     setInterval(() => checkHealth(true), 15000);
-    setInterval(() => fetchStepPlanStatus(), 30000);
+    setInterval(() => fetchPlanStatus(), 30000);
     let resizeTimer;
     window.addEventListener('resize', () => {
       clearTimeout(resizeTimer);
@@ -2427,6 +2945,7 @@
     let testChatHistory = [];
     let testChatBusy = false;
     let testChatTranscriptEl = null;
+    let testChatScrollEl = null;
     let testChatInputEl = null;
     let testChatSendBtnEl = null;
 
@@ -2435,6 +2954,19 @@
       if (isNaN(d.getTime())) return '';
       const pad = n => n < 10 ? '0' + n : '' + n;
       return pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+
+    function formatChatText(text) {
+      if (!text) return '';
+      const escaped = escapeHtml(text);
+      const bolds = [];
+      const withPlaceholders = escaped.replace(/\*\*([^*]+)\*\*/g, (_, inner) => {
+        const idx = bolds.push('<b>' + inner + '</b>') - 1;
+        return '\x00B' + idx + '\x00';
+      });
+      return withPlaceholders
+        .replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, '$1<i>$2</i>')
+        .replace(/\x00B(\d+)\x00/g, (_, i) => bolds[parseInt(i, 10)]);
     }
 
     function onTestChatModelChange() {
@@ -2447,15 +2979,17 @@
       if (testChatHistory.length > 0) {
         testChatHistory = [];
         renderTestChatMessages();
-        showToast('Model switched to ' + newModel + ' — conversation cleared', 'info');
+        const tpl = t('test_chat_model_switched_cleared', 'Model switched to {model} — conversation cleared');
+        showToast(tpl.replace('{model}', newModel), 'info');
       } else {
-        showToast('Model switched to ' + newModel, 'info');
+        const tpl = t('test_chat_model_switched', 'Model switched to {model}');
+        showToast(tpl.replace('{model}', newModel), 'info');
       }
     }
 
     function formatTestChatModelName(model) {
-      if (model === 'agnes-2.0-flash') return 'Agnes 2.0 Flash';
-      if (model === 'agnes-1.5-flash') return 'Agnes 1.5 Flash';
+      if (model === 'agnes-2.0-flash') return t('model_name_agnes_2', 'Agnes 2.0 Flash');
+      if (model === 'agnes-1.5-flash') return t('model_name_agnes_1_5', 'Agnes 1.5 Flash');
       return model;
     }
 
@@ -2474,24 +3008,32 @@
     }
 
     function getTestChatEls() {
-      if (!testChatTranscriptEl) testChatTranscriptEl = document.getElementById('testChatTranscript');
+      if (!testChatTranscriptEl) testChatTranscriptEl = document.getElementById('testChatPairs');
+      if (!testChatScrollEl) testChatScrollEl = document.getElementById('testChatScroll');
       if (!testChatInputEl) testChatInputEl = document.getElementById('testChatInput');
       if (!testChatSendBtnEl) testChatSendBtnEl = document.getElementById('testChatSendBtn');
-      return { transcript: testChatTranscriptEl, input: testChatInputEl, send: testChatSendBtnEl };
+      return { transcript: testChatTranscriptEl, scroll: testChatScrollEl, input: testChatInputEl, send: testChatSendBtnEl };
+    }
+
+    function scrollTestChatToBottom() {
+      const { scroll } = getTestChatEls();
+      if (scroll) scroll.scrollTop = scroll.scrollHeight;
     }
 
     function clearTestChat() {
       testChatHistory = [];
       const { transcript } = getTestChatEls();
       if (!transcript) return;
-        transcript.innerHTML = '<div class="test-chat-empty" id="testChatEmpty">Ask <span id="testChatModelName">' + escapeHtml(formatTestChatModelName(testChatModel)) + '</span> anything to test your API key.</div>';
+        renderTestChatMessages();
     }
 
     function renderTestChatMessages() {
       const { transcript } = getTestChatEls();
       if (!transcript) return;
       if (testChatHistory.length === 0) {
-        transcript.innerHTML = '<div class="test-chat-empty" id="testChatEmpty">Ask <span id="testChatModelName">' + escapeHtml(formatTestChatModelName(testChatModel)) + '</span> anything to test your API key.</div>';
+        const emptyTpl = t('test_chat_empty', 'Ask {model} anything to test your API key.');
+        const emptyHtml = emptyTpl.replace('{model}', '<span id="testChatModelName">' + escapeHtml(formatTestChatModelName(testChatModel)) + '</span>');
+        transcript.innerHTML = '<div class="test-chat-empty" id="testChatEmpty">' + emptyHtml + '</div>';
         return;
       }
       const last = testChatHistory.slice(-TEST_CHAT_HISTORY_LIMIT);
@@ -2510,17 +3052,19 @@
           pairs.push({ user: null, assistant: m });
         }
       }
+      const lblYou = t('test_chat_role_you', 'You');
+      const lblAgnes = t('test_chat_role_agnes', 'Agnes');
       const html = pairs.map(p => {
         const userHtml = p.user ? (() => {
           const cls = `test-chat-msg user`;
           const ts = p.user.ts ? `<span class="test-chat-msg-time">${formatLocalTime(p.user.ts)}</span>` : '';
-          return `<div class="${cls}"><div class="test-chat-msg-role">${ts}<span>You</span></div><div class="test-chat-msg-content">${escapeHtml(p.user.content || '')}</div></div>`;
+          return `<div class="${cls}"><div class="test-chat-msg-role">${ts}<span>You</span></div><div class="test-chat-msg-content">${formatChatText(p.user.content || '')}</div></div>`;
         })() : '';
         const assistantHtml = p.assistant ? (() => {
           const isError = !!p.assistant.error;
           const cls = `test-chat-msg assistant${isError ? ' error' : ''}`;
           const ts = p.assistant.ts ? `<span class="test-chat-msg-time">${formatLocalTime(p.assistant.ts)}</span>` : '';
-          return `<div class="${cls}"><div class="test-chat-msg-role">${ts}<span>Agnes</span></div><div class="test-chat-msg-content">${escapeHtml(p.assistant.content || '')}</div></div>`;
+          return `<div class="${cls}"><div class="test-chat-msg-role">${ts}<span>Agnes</span></div><div class="test-chat-msg-content">${formatChatText(p.assistant.content || '')}</div></div>`;
         })() : `<div class="test-chat-msg assistant test-chat-thinking-wrap"><div class="test-chat-msg-role"><span class="test-chat-msg-time">…</span><span>Agnes</span></div><div class="test-chat-msg-content"><span class="test-chat-thinking"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div></div>`;
         return `<div class="test-chat-pair">${userHtml}${assistantHtml}</div>`;
       }).join('');
@@ -2534,9 +3078,9 @@
       if (send) {
         send.disabled = testChatBusy;
         if (testChatBusy) {
-          send.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" style="width:10px;height:10px"></span><span>Sending</span>';
+          send.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" style="width:10px;height:10px"></span><span>' + escapeHtml(t('test_chat_sending', 'Sending')) + '</span>';
         } else {
-          send.innerHTML = '<i class="bi bi-send-fill"></i><span>Send</span>';
+          send.innerHTML = '<i class="bi bi-send-fill"></i><span>' + escapeHtml(t('test_chat_send', 'Send')) + '</span>';
         }
       }
     }
@@ -2545,10 +3089,10 @@
       if (!pair) return null;
       const div = document.createElement('div');
       div.className = 'test-chat-msg assistant test-chat-thinking-wrap';
-      div.innerHTML = '<div class="test-chat-msg-role"><span>Agnes</span></div><div class="test-chat-msg-content"><span class="test-chat-thinking"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>';
+      const lblAgnes = t('test_chat_role_agnes', 'Agnes');
+      div.innerHTML = '<div class="test-chat-msg-role"><span>' + escapeHtml(lblAgnes) + '</span></div><div class="test-chat-msg-content"><span class="test-chat-thinking"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>';
       pair.appendChild(div);
-      const { transcript } = getTestChatEls();
-      if (transcript) transcript.scrollTop = transcript.scrollHeight;
+      scrollTestChatToBottom();
       return div;
     }
 
@@ -2557,9 +3101,24 @@
       thinkingEl.classList.remove('test-chat-thinking-wrap');
       if (isError) thinkingEl.classList.add('error');
       const tsStr = ts ? `<span class="test-chat-msg-time">${formatLocalTime(ts)}</span>` : '';
-      thinkingEl.innerHTML = `<div class="test-chat-msg-role">${tsStr}<span>${role}</span></div><div class="test-chat-msg-content">${escapeHtml(content || '')}</div>`;
-      const { transcript } = getTestChatEls();
-      if (transcript) transcript.scrollTop = transcript.scrollHeight;
+      thinkingEl.innerHTML = `<div class="test-chat-msg-role">${tsStr}<span>${role}</span></div><div class="test-chat-msg-content">${formatChatText(content || '')}</div>`;
+      scrollTestChatToBottom();
+      if (!isError) playBing();
+    }
+
+    // Chime sound: "tock" by ChrisReierson, https://freesound.org/people/ChrisReierson/sounds/383979/
+    // Embedded as a base64 data URI (no network request). Volume: 0.25.
+    function playBing() {
+      try {
+        if (!window._testChatBingAudio) {
+          window._testChatBingAudio = new Audio('data:audio/mpeg;base64,//OEZAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAAMAAAGwAAYGBgYGBgYGEBAQEBAQEBAXFxcXFxcXFx0dHR0dHR0dHSQkJCQkJCQkKSkpKSkpKSkvLy8vLy8vLy80NDQ0NDQ0NDk5OTk5OTk5Pj4+Pj4+Pj4+Pz8/Pz8/Pz8//////////8AAAA5TEFNRTMuOTlyAm4AAAAALiMAABRGJAPMTgAARgAABsALyfSMAAAAAAAAAAAAAAAAAAAA//NkZAAMmRNlEqCgAAAAA0gBQAAA+9atAD8iAAEwABAAAADGNj//03FwFAWB4kuWLi4oKCgoiVuiIiIiV7u7u7olbli4uLg0BoKCiVJYNwFAWA0FBREqUT+EQwXFz3d3+Xd3d3dERErdxQUBAMf//wTD8Qf//zn+f6WbmKiHtooAACPgBANkIP8fxcTtUAsp//OUZBYcWgtjhsfMAAAAA0gBgAAAlHuTbOw1QQ/DeTpDhXhCwfsQYrm5OHyTMSZC/YCZ1iDQCUVB6QA1RQI8kyK1FylMol4c4rDwmu5BiDDmitRxitiZIqTJAiBC5mUpBBhghc6LIEVDEIY1D0TpFSKuOcRcyuiXjZNYnAORBFwQsSQ5xJizhcoxwW6FUXjEyLxkYmQm4qt8hCaIuLsUUipVIqk7qLtExMGt6Tqsr9J0kkzhkXikLea//1mz///9FTrUtEgaVZMJpJKWVkf6lGRw3ZiLF1J5w3R/sqTT5i1QcUmIVpABAZ9Hy2D/cGNl//N0ZA4R3gVNdufQAIAAA0gBwAAAVNUw6vTMZXsOdajR5tz1iN0UUSLjPgGqgB4Y5Q5xBnRbrpUUaKOtFFExNjA2PrmJ5ZkZGRNJqfPPIcTx9y+gmiRVEiyzAlws4MaOEyP0aOkklSqrRrqSqR7ooot66KKNSv////qUq50mTW+r///9FH9HmUxLrN+iig30UdT60T0UBYVjdAEAKNPm5DBjo2H/mqaW//NkZBIQegNFe2llmgAAA0gAAAAAzlzdPyU1uZ3rlui/ncv//3hK2IzrJj1mnbpJ773dt38Qok6Obl0G3daylUk6u/UumvNnIk2mOcfUKWCODR2r7jpvfw7FXGOqlYxTKxlZ2N5dDT0dKsrGOvo9mu3+rI40FlYv//f/r/5iG/2f0NWf+UVWTac8CD9uIhaq//N0ZAkQ4ec7FjKCfgAAA0gAAAAALxkl/KqWpZdWpH+rVbOVZjpHWVLwhUMEggXgLBBHpeRMlpebLVXWvWyTpImp5I5RQUgmmiz2VnlJnTRj6zdBMsmhSFZE6kSOspJ/V7TPupkdDI6etkjBSuSjprZ1fbsZ+RypW1zUCkHrWrNT/l/s+6dm2ZEN/oasaeayRF1oOriAEgV3QVFAcyIwrWOXWurWaL63//NUZBUN3Ps02jMjgAAAA0gAAAAAj9YhY18wduVvtSuy0LNgfVvZ4Yf/9DzK6oFWSrYZ3ywwqG02NSK5RjVQrkbKBs5f/zvPiKxFoKhBwwSEW2FXY0lqSeYofUf4wSyzm1f2Es6m061VCXEU/DotK/kAUoFuPAcB//NkZAkPBZkw2yYlcgAAA0gAAAAAUEmC9kzBxU+KJPWRClNpDPzxOuou1F5RBQGaYLM7HqzFIcqDarVltnsqJOKiwdAY4qgkgsoiMOrRjjok6iIclR5blXSpUNq29G0Q2ntdHS6d/3765lX9Dl6I9H8vO7FWLhJQFLW2unSVTZ3PfAr2qgJORoG9jgVD9Rmv//NUZAsMQMckyi3jgAAAA0gAAAAAM5oVFLHHvo5LDeDbdV/BtdYSiGkNdy01/1h3rOGZZYd6olU7spSgPHJj6gr2h+kFhQw0AIGgtEWZYHGsQwxSRJKeVUriCt2VHCKsUjkiVrbbd3//79/oQGIdgSqE52P6M1Ta//NUZBAL9MEKFiAjlgAAA0gAAAAAdw3ExfqKsdJTxf5CCq5UIwp4oUaz3jMzMxVVE6RMokHd4lDV44KPWxJbK4lrBUJSVWrCT0rPAWgmksPOshIOkyKyIDeokWBm/vwmN6isqqpMQU1FMy45OS41qqqqqqqqqqqq//MUZBQAGAD0AAQAAIAAA0gAAAAAqqqq//MUZBYAAAGkAAAAAAAAA0gAAAAAqqqq');
+          window._testChatBingAudio.preload = 'auto';
+        }
+        const a = window._testChatBingAudio.cloneNode(true);
+        a.volume = 0.25;
+        const p = a.play();
+        if (p && p.catch) p.catch(() => {});
+      } catch (e) {}
     }
 
     function prependUserBubble(text, ts) {
@@ -2568,9 +3127,10 @@
       if (transcript.querySelector('.test-chat-empty')) transcript.innerHTML = '';
       const pair = document.createElement('div');
       pair.className = 'test-chat-pair';
-      pair.innerHTML = `<div class="test-chat-msg user"><div class="test-chat-msg-role"><span class="test-chat-msg-time">${formatLocalTime(ts)}</span><span>You</span></div><div class="test-chat-msg-content">${escapeHtml(text)}</div></div>`;
+      const lblYou = t('test_chat_role_you', 'You');
+      pair.innerHTML = `<div class="test-chat-msg user"><div class="test-chat-msg-role"><span class="test-chat-msg-time">${formatLocalTime(ts)}</span><span>${escapeHtml(lblYou)}</span></div><div class="test-chat-msg-content">${escapeHtml(text)}</div></div>`;
       transcript.appendChild(pair);
-      transcript.scrollTop = transcript.scrollHeight;
+      scrollTestChatToBottom();
       return pair;
     }
 
@@ -2585,6 +3145,7 @@
       input.value = '';
       setTestChatBusy(true);
       const thinkingEl = appendAssistantThinking(pair);
+      const lblAgnes = t('test_chat_role_agnes', 'Agnes');
       try {
         const resp = await fetch('/v1/chat/completions', {
           method: 'POST',
@@ -2598,21 +3159,21 @@
         const data = await resp.json();
         let assistantMsg;
         if (!resp.ok) {
-          const errMsg = data?.error?.message || data?.error || ('HTTP ' + resp.status);
+          const errMsg = data?.error?.message || data?.error || (t('http_prefix', 'HTTP') + ' ' + resp.status);
           assistantMsg = { role: 'assistant', content: errMsg, error: true, ts: Date.now() };
         } else {
-          const reply = data?.choices?.[0]?.message?.content || '(no response)';
+          const reply = data?.choices?.[0]?.message?.content || t('no_response_fallback', '(no response)');
           assistantMsg = { role: 'assistant', content: reply, ts: Date.now() };
         }
-        setAssistantBubble(thinkingEl, 'Agnes', assistantMsg.content, assistantMsg.ts, !!assistantMsg.error);
+        setAssistantBubble(thinkingEl, lblAgnes, assistantMsg.content, assistantMsg.ts, !!assistantMsg.error);
         testChatHistory.push(assistantMsg);
         if (testChatHistory.length > TEST_CHAT_HISTORY_LIMIT) {
           testChatHistory = testChatHistory.slice(-TEST_CHAT_HISTORY_LIMIT);
           renderTestChatMessages();
         }
       } catch (e) {
-        const errText = 'Error: ' + (e?.message || 'request failed');
-        setAssistantBubble(thinkingEl, 'Agnes', errText, Date.now(), true);
+        const errText = t('toast_error_prefix', 'Error:') + ' ' + (e?.message || t('request_failed', 'request failed'));
+        setAssistantBubble(thinkingEl, lblAgnes, errText, Date.now(), true);
         testChatHistory.push({ role: 'assistant', content: errText, error: true, ts: Date.now() });
         if (testChatHistory.length > TEST_CHAT_HISTORY_LIMIT) {
           testChatHistory = testChatHistory.slice(-TEST_CHAT_HISTORY_LIMIT);
@@ -2627,9 +3188,19 @@
     document.getElementById('testChatInput')?.addEventListener('keydown', function(e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
+        primeTestChatAudio();
         sendTestChat();
       }
     });
+
+    function primeTestChatAudio() {
+      try {
+        if (!window._testChatAudioCtx) window._testChatAudioCtx = new (window.AudioContext || window.webkitAudioAudioContext || window.webkitAudioContext)();
+        const ctx = window._testChatAudioCtx;
+        if (ctx.state === 'suspended') ctx.resume();
+      } catch (e) {}
+    }
+    document.getElementById('testChatSendBtn')?.addEventListener('click', primeTestChatAudio);
   </script>
 </body>
 </html>

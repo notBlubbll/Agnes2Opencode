@@ -38,7 +38,7 @@ AGNES-PROXY/
 - `getUserInfo()` — `GET /v1/models` with 10s AbortController timeout to validate API key; sends `User-Agent: Agnes2Opencode`
 - `chatCompletions(body)` — `POST /v1/chat/completions` with configurable timeout, streaming-aware; forwards `User-Agent: Agnes2Opencode` on every proxied request
 - `getAccountInfo()` — Returns null (unused)
-- `getStepPlanStatus()` — Returns null (unused)
+- `getPlanStatus()` — Returns null (unused)
 - `getPlanStatus()` — Returns null (unused)
 
 ### 3. Platform Login
@@ -100,7 +100,7 @@ AGNES-PROXY/
 - `handleModels(req, res)` — OpenAI-format model list (cached in `modelsCache`)
 - `handleChatCompletions(req, res)` — Parses body, remaps model, calls `proxyChatRequest`
 - `handleAccountInfo(req, res)` — Returns platform user data from `/api/user/self`
-- `handleStepPlanStatus(req, res)` — Returns subscription/plan status with usage windows (returns test data when `config.testMode` is true)
+- `handlePlanStatus(req, res)` — Returns subscription/plan status with usage windows (returns test data when `config.testMode` is true)
 - `proxyChatRequest(res, payload, model)` — Core proxy: detect session, check cache, clone payload, normalize tools, forward to upstream with retry loop
 
 ### 8. Retry Logic
@@ -115,8 +115,38 @@ AGNES-PROXY/
 
 - When `config.testMode` is true:
   - `/v1/chat/completions` returns a mock `"Test"` response without calling upstream
-  - `/api/step-plan-status` returns synthetic subscription data with fake usage windows
+  - `/api/plan-status` returns synthetic subscription data with fake usage windows
+  - Forces the dashboard locale to `de` for the autotranslate (i18n) feature
 - Enabled via `TEST_MODE: true` in config
+
+### 9b. i18n / Autotranslate
+
+- `I18N_STRINGS` — Hardcoded catalog of every user-visible dashboard string, keyed by stable identifiers
+- `resolveForcedLocale()` — Returns the forced locale or `null`. Priority: `config.localOverwrite` → `config.testMode` (forces `de`) → `null`
+- `I18N_TEST_LOCALE` — Removed; replaced by `resolveForcedLocale()`
+- `loadI18nCache(locale)` / `saveI18nCache(locale, data)` — Disk persistence to `.cache/i18n/<locale>.json`
+- `translateCatalogForLocale(locale)` — Splits catalog into batches of 30, calls `callAgnesTranslate()` per batch, merges results
+- `callAgnesTranslate(promptText)` — Single Agnes chat call with the bundled `Translate each numbered line to {locale}` prompt, 120s timeout
+- `buildTranslatePrompt(locale, entries)` — Builds the batch prompt in `NUMBER|TRANSLATION` format
+- `parseI18nBatchResponse(text, expectedKeys)` — Parses `NUMBER|TRANSLATION` lines back into a dict keyed by the catalog key
+- `ensureI18nForLocale(locale)` — Returns cached bundle if present, otherwise translates (only when an API key is configured) and caches
+- `buildI18nBundle(locale)` — Returns the cache or a `pending` placeholder
+- `buildI18nConfig()` — Returns `{ forced_locale, test_mode, local_overwrite, reason }`
+- `handleI18nGet(req, res)` — `GET /api/i18n`:
+  - `?config=1` → JSON of effective config
+  - `?locale=<xx>` (default = forced locale or `en`)
+  - `&generate=1` → translates on first use, then caches
+  - Always includes `forced_locale`, `test_mode`, `local_overwrite` in the response
+- `prefetchI18nOnStartup()` — At startup, if a forced locale is in effect and an API key is configured, prefetches and caches translations so the first dashboard load is already translated
+- Config key: `LOCAL_OVERWRITE` (string, e.g. `"de"`, `"fr"`, `"ja"`) — empty/null disables
+- Environment variable: `LOCAL_OVERWRITE` (overrides config)
+- Locale resolution on the dashboard (highest to lowest):
+  1. `?locale=<xx>` URL query
+  2. `forced_locale` from `/api/i18n?config=1`
+  3. `localStorage.preferredLocale` (user's previous toggle)
+  4. `navigator.languages[0]`
+  5. `en`
+- When forced, the autotranslate checkbox is locked ON and disabled in the UI
 
 ### 10. Request Router (pathname-based)
 
@@ -129,13 +159,14 @@ Routes by pathname:
 - `/api/generate-image` (POST) → Generate AI wallpaper, save to `.cache/ai-paper.jpg`
 - `/api/keys` (GET/POST) — Multi-key CRUD (add/update/delete with `{name, token, platformUsername}`)
 - `/api/account` (GET) → Platform user data (`{ logged_in, user }`)
-- `/api/step-plan-status` (GET) → Subscription plan status with usage windows
+- `/api/plan-status` (GET) → Subscription plan status with usage windows
 - `/api/login` (POST) → Platform login with `{ username, password }`
 - `/api/logout` (POST) → Clear platform session, save config
 - `/api/platform/user` (GET) → Platform user info (requires login)
 - `/api/platform/keys` (GET) → Fetch API keys from platform (`GET /api/token`) with plan name and username
 - `/api/platform/token/:id/key` (GET) → Fetch full API key value from platform (`POST /api/token/:id/key`)
 - `/api/cache` (GET/DELETE) → Cache stats/clear
+- `/api/i18n` (GET) → Translated UI bundle. `?config=1` returns `{forced_locale, test_mode, local_overwrite, reason}`. `?locale=<xx>[&generate=1]` returns the bundle for a locale, generating on first use.
 - `/healthz` → Health check with full status dump
 - `/v1/models` → OpenAI models
 - `/v1/chat/completions` → OpenAI chat
@@ -172,6 +203,16 @@ Routes by pathname:
 - **`sanitizeKeyName(planName, userName)`** — Formats token name as `PlanName(username)` with dots removed, "free" stripped, thinspace for spaces
 - **`retrievePlatformKeys()`** — Checks platform login, then opens apply key modal
 - **Model Tags** — Toggle models on/off with capability badges (reasoning, tools, vision, context size)
+- **Test Chat Bar** — Quick chat under the Models block, only visible when keys are configured
+  - Model selector: `agnes-2.0-flash` (default) or `agnes-1.5-flash`
+  - 200px tall scrollable transcript, glass design (matches plan cards)
+  - Inner elements use `backdrop-filter: blur(...)` for the frosted look
+  - Shows the **last 4 messages**, paired (user on top, assistant reply below)
+  - Each message has a local `HH:MM` timestamp prefixing the role label
+  - Pairs rendered in normal column order; transcript uses `flex-direction: column` + `justify-content: flex-end` so the latest exchange sits at the bottom
+  - Live thinking indicator (3 dots) inside the pair; mutated in place to the real reply (no re-render, no double spinners)
+  - Switching models clears the conversation and shows a toast
+  - Clear button wipes history and shows the empty hint with the current model name
 - **SS Mode** — `token-blurred` CSS class (blur on hover)
 - **Bing Wallpaper** — Daily rotating background with toggle
 - **AI Wallpaper** — Generated via Agnes AI image model, auto-enabled when a key is saved
@@ -223,7 +264,8 @@ Error   → parse upstream error, return formatted response
    - If validation fails → re-login with `platformUsername`/`platformPassword`
    - Else if credentials exist → auto-login via `/api/user/login`
 6. `fetchRemoteModels()` — Fetch models from Agnes AI API
-7. `http.createServer(handleRequest).listen(port)` — With up to 10 retries on EADDRINUSE (2s apart)
+7. `prefetchI18nOnStartup()` — If a forced locale is in effect (`localOverwrite` or `testMode`), translate the UI catalog and cache it to `.cache/i18n/<locale>.json`
+8. `http.createServer(handleRequest).listen(port)` — With up to 10 retries on EADDRINUSE (2s apart)
 
 Note: `setupOpencodeConfig()` is called on config mutations (login, logout, key changes), not during startup itself.
 
@@ -259,7 +301,7 @@ curl http://localhost:8080/healthz
 curl http://localhost:8080/v1/models
 curl http://localhost:8080/api/models
 curl http://localhost:8080/api/account
-curl http://localhost:8080/api/step-plan-status
+curl http://localhost:8080/api/plan-status
 
 # Test platform login
 curl -X POST http://localhost:8080/api/login \
@@ -290,6 +332,11 @@ curl -X DELETE http://localhost:8080/api/cache
 # Test wallpaper
 curl http://localhost:8080/api/bg
 curl -X POST http://localhost:8080/api/generate-image
+
+# Test i18n (autotranslate)
+curl 'http://localhost:8080/api/i18n?config=1'              # see effective forced locale
+curl 'http://localhost:8080/api/i18n?locale=de'              # cached bundle (or pending placeholder)
+curl 'http://localhost:8080/api/i18n?locale=de&generate=1'   # generate via Agnes on first use, then cache
 ```
 
 ## Security

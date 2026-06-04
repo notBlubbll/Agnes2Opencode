@@ -118,6 +118,7 @@ function loadConfig() {
   if (process.env.CACHE_MAX_SIZE) rawConfig.CACHE_MAX_SIZE = parseInt(process.env.CACHE_MAX_SIZE);
   if (process.env.CACHE_ENABLED) rawConfig.CACHE_ENABLED = process.env.CACHE_ENABLED !== 'false';
   if (process.env.TEST_MODE) rawConfig.TEST_MODE = process.env.TEST_MODE !== 'false';
+  if (process.env.LOCAL_OVERWRITE) rawConfig.LOCAL_OVERWRITE = process.env.LOCAL_OVERWRITE;
 
   const requestTimeout = parseDuration(rawConfig.REQUEST_TIMEOUT);
   if (!rawConfig.LISTEN_ADDR) throw new Error('LISTEN_ADDR cannot be empty');
@@ -183,6 +184,7 @@ function loadConfig() {
     cacheMaxSize: Math.max(0, rawConfig.CACHE_MAX_SIZE || 100),
     cacheEnabled: rawConfig.CACHE_ENABLED !== false,
     testMode: rawConfig.TEST_MODE !== false,
+    localOverwrite: typeof rawConfig.LOCAL_OVERWRITE === 'string' && rawConfig.LOCAL_OVERWRITE.trim() ? rawConfig.LOCAL_OVERWRITE.trim().toLowerCase().split(/[-_]/)[0].slice(0, 8) : null,
     wallpaperMode: rawConfig.WALLPAPER_MODE || 'bing',
     wallpaperPrompt: rawConfig.WALLPAPER_PROMPT || 'realistic vibrant colorful mountain range landscape',
   };
@@ -227,9 +229,463 @@ function saveConfig(cfg) {
     CACHE_MAX_SIZE: cfg.cacheMaxSize || 100,
     CACHE_ENABLED: cfg.cacheEnabled !== false,
     TEST_MODE: cfg.testMode !== false,
+    LOCAL_OVERWRITE: cfg.localOverwrite || null,
     KEYS: cfg.keys,
     PLATFORM_USERS: platformUsers,
   }, null, 2));
+}
+
+// --- i18n: UI string catalog for dashboard translation ---
+// Every user-visible dashboard string. Keys are stable identifiers; values
+// are the original English text. The proxy translates these on startup per
+// locale and caches the result on disk for instant reuse.
+const I18N_STRINGS = {
+  // Header
+  app_title: 'Agnes2Opencode Dashboard',
+  status_checking: 'Checking...',
+  status_online: 'Online',
+  status_offline: 'Offline',
+  status_test: 'Test',
+
+  // Plan fieldset
+  plan_legend: 'Plan',
+  plan_label: 'Plan',
+  plan_loading: 'Loading...',
+  usage_5h: '5h Usage',
+  usage_weekly: 'Weekly Usage',
+  plan_free_access: 'Free Access',
+  plan_no_key: 'No key configured',
+  plan_free_mode: 'Free mode',
+  plan_free_plan: 'Free Plan',
+  plan_expired: 'expired',
+
+  // Models
+  section_models: 'Available Models',
+  models_no_keys: 'Add a key to see available models',
+  models_none: 'No models available',
+  model_enabled: 'enabled',
+  model_disabled: 'disabled',
+  model_saved_fail: 'Failed to save model settings',
+
+  // Test Chat
+  section_test_chat: 'Test Chat',
+  test_chat_empty: 'Ask {model} anything to test your API key.',
+  test_chat_placeholder: 'Type a message...',
+  test_chat_send: 'Send',
+  test_chat_sending: 'Sending',
+  test_chat_role_you: 'You',
+  test_chat_role_agnes: 'Agnes',
+  test_chat_no_response: '(no response)',
+  test_chat_cleared: 'Conversation cleared',
+  test_chat_model_switched_cleared: 'Model switched to {model} — conversation cleared',
+  test_chat_model_switched: 'Model switched to {model}',
+  test_chat_clear: 'Clear conversation',
+  test_chat_error_prefix: 'Error:',
+
+  // Tokens / API Key card
+  section_api_key: 'API Key',
+  btn_manage: 'Manage',
+  tokens_none: 'No API keys detected',
+  tokens_unnamed: 'Unnamed',
+  tokens_no_keys: 'No API keys configured.',
+
+  // Quick Actions
+  section_quick_actions: 'Quick Actions',
+  btn_check_health: 'Check Health',
+  btn_test_connection: 'Test Connection',
+  btn_refresh_models: 'Refresh Models',
+  btn_platform_login: 'Platform Login',
+
+  // Environment
+  section_environment: 'Environment',
+  env_runtime: 'Runtime',
+  env_started_at: 'Started At',
+  env_wallpaper: 'Wallpaper',
+  wp_none: 'None',
+  wp_bing: 'Bing',
+  wp_ai: 'AI Image',
+  wp_ai_prompt: 'AI Prompt',
+  wp_ai_placeholder: 'Image prompt...',
+  env_ss_mode: 'SS Mode',
+
+  // Proxy Configuration
+  section_proxy_config: 'Proxy Configuration',
+  cfg_listen_addr: 'Listen Address',
+  cfg_timeout: 'Timeout',
+  cfg_upstream_url: 'Upstream URL',
+
+  // Keys modal
+  modal_manage_keys: 'Manage API Keys',
+  modal_add_key: 'Add New API Key',
+  key_name_placeholder: 'Key name (e.g. Key 2)',
+  key_value_placeholder: 'API key value',
+  btn_add_key: 'Add Key',
+  btn_retrieve_tokens: 'Retrieve Tokens from Platform',
+  btn_add_platform_account: 'Add Platform Account',
+  btn_close: 'Close',
+  platform_account: 'Platform Account',
+  online: 'Online',
+  logout_and_remove: 'Logout & Remove',
+  label_user: 'User',
+  label_email: 'Email',
+  label_status: 'Status',
+  label_last_login: 'Last login',
+  status_active: 'Active',
+  status_inactive: 'Inactive',
+  no_platform_accounts: 'No platform accounts',
+  btn_login: 'Login',
+  toast_key_required: 'Key is required',
+  toast_key_added: 'Key added',
+  toast_key_updated: 'Key updated',
+  toast_key_deleted: 'Key deleted',
+  toast_failed_add: 'Failed to add key',
+  toast_failed_update: 'Failed to update key',
+  toast_failed_delete: 'Failed to delete key',
+  toast_failed_prefix: 'Failed:',
+  label_name: 'Name',
+  label_key: 'Key',
+  btn_save: 'Save',
+  btn_cancel: 'Cancel',
+  btn_delete: 'Delete',
+  delete_confirm: 'Delete this key?',
+  label_session: 'Session',
+  user_none: 'None',
+  toast_failed_load_config: 'Failed to load configuration',
+  toast_failed_load_keys: 'Failed to load keys',
+  toast_proxy_healthy: 'Proxy is healthy',
+  toast_health_failed: 'Proxy health check failed',
+  toast_connected: 'Connected! {n} models available',
+  toast_connection_failed: 'Connection test failed',
+  toast_models_refreshed: 'Models refreshed',
+
+  // Platform login modal
+  modal_platform_login: 'Platform Login',
+  modal_add_platform_account: 'Add Platform Account',
+  label_username: 'Username (email)',
+  username_placeholder: 'email@example.com',
+  label_password: 'Password',
+  password_placeholder: 'password',
+  btn_save_and_login: 'Save & Login',
+  toast_required_fields: 'Username and password are required',
+  toast_logging_in: 'Logging in...',
+  toast_logged_in_as: 'Logged in as {email}',
+  toast_login_success: 'Platform login successful',
+  toast_login_failed_prefix: 'Login failed:',
+  toast_error_prefix: 'Error:',
+  toast_logout: 'Logged out',
+
+  // Apply key modal
+  modal_apply_key: 'Apply API Key',
+  apply_key_subtitle: 'Select an API key from your account to apply.',
+  apply_key_loading: 'Loading keys...',
+  apply_key_no_keys: 'No keys found on your account.',
+  apply_key_active: 'Active',
+  apply_key_available: 'Available Keys',
+  apply_key_value: 'Key Value',
+  apply_key_saved_as: 'Saved as: {name}',
+  apply_key_fetching: 'Fetching full key...',
+  apply_key_loaded: 'Key loaded.',
+  apply_key_fetch_failed: 'Fetch failed — paste it below.',
+  apply_key_select_first: 'Select a key first — wait for it to load, or paste one below.',
+  apply_key_saving: 'Saving {name}...',
+  apply_key_invalid: 'Invalid selection',
+  apply_key_updated: 'Key updated: {name}',
+  apply_key_added: 'Key added: {name}',
+  btn_skip: 'Skip',
+  btn_apply_selected: 'Apply Selected',
+  default_name: 'Default',
+  toast_logout_removed: 'Logged out and removed: {user}',
+  toast_logout_failed: 'Logout failed',
+  remove_confirm: 'Logout and remove platform user "{user}"? This will unlink the account from all keys.',
+
+  // No-plan card
+  no_plan_indef_free: 'Indefinitely Free:',
+  no_plan_indef_free_body: 'The proprietary baseline models — such as Agnes-2.0-Flash — are free to use without a time trial or credit card.',
+  no_plan_rate_limits: 'Rate Limits:',
+  no_plan_rate_body: 'Free tier: 8 RPM (Request Per Minute). Paid plans have a 5-hour request limit:',
+  no_plan_starter: 'Starter: 1,500 / 5h',
+  no_plan_plus: 'Plus: 7,500 / 5h',
+  no_plan_pro: 'Pro: 30,000 / 5h',
+  no_plan_consider: 'Consider subscribing to keep the service up and available for everyone if you like it.',
+  no_plan_view_plans: 'View Plans & Pricing',
+  no_plan_logged_in_body: "You're logged in but don't have an active subscription. The free tier provides access to all models, but with a RPM (Request Per Minute) limit of 8.",
+  no_plan_subscribe_text: 'Subscribe for higher rate limits and premium models.',
+  btn_logout: 'Logout',
+  no_plan_login_body: 'Log in to your Agnes AI account to see subscription details, usage stats, and manage your plan.',
+  btn_login_to_platform: 'Login to Platform',
+  no_plan_no_account: "Don't have an account?",
+
+  // Translating overlay
+  overlay_translating: 'Translating',
+  overlay_translating_sub: 'Translating UI to {lang}...',
+  autotranslate_label: 'autotranslate (beta)',
+
+  // Model display names (used in test chat selector)
+  model_name_agnes_2: 'Agnes 2.0 Flash',
+  model_name_agnes_1_5: 'Agnes 1.5 Flash',
+  capability_reasoning: 'reasoning',
+  capability_tools: 'tools',
+  capability_vision: 'vision',
+  cap_ctx: '{n}K ctx',
+
+  // Misc dynamic
+  refreshes_in: 'Refreshes in {time}',
+  duration_left: '{d}d {h}h {m}m left',
+  http_prefix: 'HTTP',
+  loading_keys_from_platform: 'Loading keys from platform...',
+  no_response_fallback: '(no response)',
+  request_failed: 'request failed',
+
+  // Failed login
+  failed_prefix: 'Failed:',
+  unknown_error: 'unknown',
+
+  // Additional toast / status strings
+  toast_api_key_validated: 'API key validated',
+  toast_api_key_probe_failed: 'API key probe failed',
+  toast_api_key_probe_error: 'API key probe error',
+  toast_login_first_retrieve: 'Login to platform first to retrieve tokens',
+  toast_translation_failed: 'Translation failed: {error}',
+  key_title_edit: 'Edit',
+  key_title_delete: 'Delete',
+  key_status_active: 'Active',
+  key_status_inactive: 'Inactive',
+  key_status_none: 'None',
+  key_status_checking: 'Checking…',
+  connection_failed: 'Connection failed',
+};
+
+function resolveForcedLocale() {
+  if (config?.localOverwrite) return config.localOverwrite;
+  if (config?.testMode) return 'de';
+  return null;
+}
+
+function getI18nCachePath(locale) {
+  return path.join(__dirname, '.cache', 'i18n', `${locale}.json`);
+}
+
+function loadI18nCache(locale) {
+  const fp = getI18nCachePath(locale);
+  if (!fs.existsSync(fp)) return null;
+  try { return JSON.parse(fs.readFileSync(fp, 'utf8')); }
+  catch (e) { return null; }
+}
+
+function saveI18nCache(locale, data) {
+  const fp = getI18nCachePath(locale);
+  const dir = path.dirname(fp);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(fp, JSON.stringify(data, null, 2));
+}
+
+function splitI18nForBatch(items, batchSize) {
+  const out = [];
+  for (let i = 0; i < items.length; i += batchSize) out.push(items.slice(i, i + batchSize));
+  return out;
+}
+
+function parseI18nBatchResponse(text, expectedKeys) {
+  const result = {};
+  const lines = text.split(/\r?\n/);
+  const byIdx = new Map();
+  for (const ln of lines) {
+    const trimmed = ln.trim();
+    if (!trimmed) continue;
+    const sepIdx = trimmed.indexOf('|');
+    if (sepIdx <= 0) continue;
+    const numStr = trimmed.slice(0, sepIdx).replace(/[^0-9]/g, '');
+    if (!numStr) continue;
+    const idx = parseInt(numStr, 10);
+    if (Number.isNaN(idx) || idx < 1) continue;
+    let value = trimmed.slice(sepIdx + 1).trim();
+    if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+    if (value) byIdx.set(idx, value);
+  }
+  for (let i = 0; i < expectedKeys.length; i++) {
+    const key = expectedKeys[i];
+    const idx = i + 1;
+    if (byIdx.has(idx)) result[key] = byIdx.get(idx);
+    else result[key] = I18N_STRINGS[key];
+  }
+  return result;
+}
+
+async function callAgnesTranslate(promptText) {
+  if (!config?.apiKey) throw new Error('no api key configured for translation');
+  const requestURL = `${config.upstreamBaseURL || AGNES_API_BASE}/v1/chat/completions`;
+  const body = {
+    model: 'agnes-2.0-flash',
+    messages: [
+      { role: 'system', content: 'You are a precise UI translator. Translate each numbered line into the requested target language. Preserve placeholders like {model}, {name}, {time}, {user}, {email}, {n}, {d}, {h}, {m} exactly. Keep short labels concise. Output one translation per line in the format NUMBER|TRANSLATION and nothing else.' },
+      { role: 'user', content: promptText },
+    ],
+    temperature: 0.2,
+    stream: false,
+  };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120000);
+  try {
+    const resp = await fetch(requestURL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': AGNES_USER_AGENT,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`upstream ${resp.status}: ${errText}`);
+    }
+    const data = await resp.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content || typeof content !== 'string') throw new Error('no translation content returned');
+    return content;
+  } catch (e) {
+    clearTimeout(timer);
+    throw e;
+  }
+}
+
+function buildTranslatePrompt(locale, entries) {
+  const lines = entries.map(([key, value], i) => `${i + 1}|${value}`).join('\n');
+  return `You are translating UI strings of a software dashboard to ${locale}.
+
+For each numbered line, output the translation in EXACTLY this format:
+NUMBER|TRANSLATION
+
+Rules:
+- Keep ALL placeholders exactly as written: {model}, {name}, {time}, {user}, {email}, {n}, {d}, {h}, {m}, {lang}
+- Keep product names (Agnes, Opencode), technical terms (API, URL, HTTP, RPM, KB, KB ctx, Free Plan, Free Access) untranslated where idiomatic
+- Keep short labels concise (button labels = 1-2 words in target language)
+- Preserve capitalization style of the source
+- Do NOT add numbering, commentary, or extra lines
+- Output one line per input line, in the same order, from 1 to ${entries.length}
+- Translate ALL ${entries.length} lines, even if some are similar
+
+Input:\n${lines}`;
+}
+
+const I18N_TRANSLATE_MAX_RETRIES = 3;
+const I18N_TRANSLATE_RETRY_DELAY_MS = 5000;
+
+function isRetryableTranslateError(err) {
+  const msg = err?.message || String(err);
+  if (/upstream 5\d\d/i.test(msg)) return true;
+  if (/upstream 429/i.test(msg)) return true;
+  if (/fetch failed|aborted|network|ECONNRESET|ETIMEDOUT|socket hang up/i.test(msg)) return true;
+  return false;
+}
+
+async function callAgnesTranslateWithRetry(promptText) {
+  let lastErr;
+  for (let attempt = 1; attempt <= I18N_TRANSLATE_MAX_RETRIES; attempt++) {
+    try {
+      return await callAgnesTranslate(promptText);
+    } catch (e) {
+      lastErr = e;
+      const msg = e?.message || String(e);
+      if (!isRetryableTranslateError(e) || attempt === I18N_TRANSLATE_MAX_RETRIES) throw e;
+      const delay = I18N_TRANSLATE_RETRY_DELAY_MS * attempt;
+      console.log(`[i18n] Translate attempt ${attempt}/${I18N_TRANSLATE_MAX_RETRIES} failed (${msg.slice(0, 160)}), retrying in ${delay}ms`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
+
+async function translateCatalogForLocale(locale) {
+  const entries = Object.entries(I18N_STRINGS);
+  const BATCH_SIZE = 100;
+  const batches = splitI18nForBatch(entries, BATCH_SIZE);
+  const merged = {};
+  for (let b = 0; b < batches.length; b++) {
+    const batch = batches[b];
+    const promptText = buildTranslatePrompt(locale, batch);
+    const expectedKeys = batch.map(([k]) => k);
+    const respText = await callAgnesTranslateWithRetry(promptText);
+    const parsed = parseI18nBatchResponse(respText, expectedKeys);
+    Object.assign(merged, parsed);
+    console.log(`[i18n] Translated batch ${b + 1}/${batches.length} for ${locale} (${batch.length} strings)`);
+  }
+  const result = { locale, generated_at: new Date().toISOString(), source: 'agnes-2.0-flash', strings: merged };
+  return result;
+}
+
+async function ensureI18nForLocale(locale) {
+  if (!locale) return null;
+  const cached = loadI18nCache(locale);
+  if (cached) return cached;
+  if (!config?.apiKey) return null;
+  console.log(`[i18n] Generating translations for locale=${locale}...`);
+  try {
+    const result = await translateCatalogForLocale(locale);
+    saveI18nCache(locale, result);
+    console.log(`[i18n] Cached ${Object.keys(result.strings).length} strings for ${locale}`);
+    return result;
+  } catch (e) {
+    console.error(`[i18n] Translation failed for ${locale}: ${e.message}`);
+    return null;
+  }
+}
+
+function buildI18nBundle(locale) {
+  if (!locale || locale === 'en') {
+    return { locale: 'en', source: 'builtin', generated_at: null, strings: I18N_STRINGS };
+  }
+  const cached = loadI18nCache(locale);
+  if (cached) return cached;
+  return { locale, source: 'pending', generated_at: null, strings: I18N_STRINGS };
+}
+
+function buildI18nConfig() {
+  const forced = resolveForcedLocale();
+  return {
+    forced_locale: forced,
+    test_mode: !!config?.testMode,
+    local_overwrite: config?.localOverwrite || null,
+    reason: forced ? (config?.localOverwrite ? 'local_overwrite' : 'test_mode') : 'browser',
+  };
+}
+
+async function handleI18nGet(req, res) {
+  if (req.method !== 'GET') { writeOpenAIError(res, 405, 'method not allowed', 'invalid_request_error', ''); return; }
+  const url = new URL(req.url, 'http://localhost');
+  if (url.searchParams.get('config') === '1') {
+    writeJSON(res, 200, buildI18nConfig());
+    return;
+  }
+  const forced = resolveForcedLocale();
+  const queryLocale = url.searchParams.get('locale');
+  const localeRaw = queryLocale || forced || 'en';
+  const locale = String(localeRaw).toLowerCase().split(/[-_]/)[0].slice(0, 8) || 'en';
+  const bundle = url.searchParams.get('generate') === '1' && locale !== 'en'
+    ? ((await ensureI18nForLocale(locale)) || buildI18nBundle(locale))
+    : buildI18nBundle(locale);
+  writeJSON(res, 200, { ...bundle, forced_locale: forced, test_mode: !!config?.testMode, local_overwrite: config?.localOverwrite || null });
+}
+
+async function prefetchI18nOnStartup() {
+  const forced = resolveForcedLocale();
+  if (!forced) {
+    console.log('[i18n] No forced locale (test_mode off, no local_overwrite), skipping prefetch');
+    return;
+  }
+  if (!config?.apiKey) {
+    console.log('[i18n] No API key, skipping translation prefetch');
+    return;
+  }
+  try {
+    const result = await ensureI18nForLocale(forced);
+    if (result) console.log(`[i18n] Startup translations ready for ${forced} (${Object.keys(result.strings).length} strings)`);
+  } catch (e) {
+    console.error(`[i18n] Startup prefetch failed: ${e.message}`);
+  }
 }
 
 const TITLE_PROMPT_RE = /generate\s+a\s+title\s+for\s+this\s+conversation/i;
@@ -344,7 +800,7 @@ class UpstreamClient {
 
   async getAccountInfo() { return null; }
 
-  async getStepPlanStatus() { return null; }
+  async getPlanStatus() { return null; }
 
   async getPlanStatus() { return null; }
 }
@@ -854,7 +1310,7 @@ function hasApiToken() {
   return keys.length > 0 && keys.some(t => t.key);
 }
 
-async function handleStepPlanStatus(req, res) {
+async function handlePlanStatus(req, res) {
   if (req.method !== 'GET') { writeOpenAIError(res, 405, 'method not allowed', 'invalid_request_error', ''); return; }
   if (config.testMode) {
     writeJSON(res, 200, {
@@ -968,6 +1424,11 @@ async function handleHealthz(req, res) {
     runtime: IS_BUN ? 'bun' : 'node',
     runtime_version: RUNTIME_VERSION,
     cache: { ...responseCache.stats, enabled: config.cacheEnabled },
+    i18n: {
+      forced_locale: resolveForcedLocale(),
+      test_mode: !!config.testMode,
+      local_overwrite: config.localOverwrite || null,
+    },
     platform: {
       logged_in: !!platformSession.token,
       user: platformSession.user?.email || null,
@@ -1122,13 +1583,16 @@ async function proxyChatRequest(res, payload, requestedModel) {
     }
 
     const errorBodyStr = (await readBodyWithDecompress(resp.body, resp.headers['content-encoding'])).toString();
-    if (isModelUnavailableError(errorBodyStr) || isQueryEngineError(errorBodyStr)) {
+    if (resp.status === 429 || isModelUnavailableError(errorBodyStr) || isQueryEngineError(errorBodyStr) || isDoRequestError(errorBodyStr)) {
       if (isLast) {
         console.log(`${ts} [Token: ${tokenPreview}] [Session#${sessNum}>${name}]-[${requestedModel}]-error:${resp.status}`);
         writePassthroughError(res, resp.status, errorBodyStr);
         return { retry: false };
       }
-      const reason = isQueryEngineError(errorBodyStr) ? 'query_engine' : 'unavailable';
+      let reason = 'unavailable';
+      if (resp.status === 429) reason = 'rate_limited';
+      else if (isQueryEngineError(errorBodyStr)) reason = 'query_engine';
+      else if (isDoRequestError(errorBodyStr)) reason = 'do_request_failed';
       console.log(`${ts} [Token: ${tokenPreview}] [Session#${sessNum}>${name}]-[${requestedModel}]-retry:${reason}`);
       return { retry: true };
     }
@@ -1147,7 +1611,11 @@ function isQueryEngineError(body) {
   return /not connected to the query engine/i.test(body);
 }
 
-const MAX_RETRIES = 3;
+function isDoRequestError(body) {
+  return /do request failed|do_request_failed/i.test(body);
+}
+
+const MAX_RETRIES = 10;
 const RETRY_DELAY_MS = 5000;
 
 async function retryLoop(fn) {
@@ -1197,42 +1665,70 @@ async function generateAiWallpaperToDisk() {
       if (!apiKey) throw new Error('no API key');
   
       const prompt = config.wallpaperPrompt || 'hdr, polar night, vibrant rainbow colors, trees, mountains, glaciers, stars and dark skies';
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 60000);
-      const resp = await fetch(`${config.upstreamBaseURL}/v1/images/generations`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'User-Agent': AGNES_USER_AGENT,
-        },
-        body: JSON.stringify({
-          model: 'agnes-image-2.1-flash',
-          prompt,
-          n: 1,
-          size: '1024x768',
-          seed: Date.now(),
-        }),
-        signal: controller.signal,
+      const body = JSON.stringify({
+        model: 'agnes-image-2.1-flash',
+        prompt,
+        n: 1,
+        size: '1024x768',
+        seed: Date.now(),
       });
-      clearTimeout(timer);
-      if (!resp.ok) {
+      const headers = {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': AGNES_USER_AGENT,
+      };
+
+      let data = null;
+      let lastError = null;
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 60000);
+        let resp;
+        try {
+          resp = await fetch(`${config.upstreamBaseURL}/v1/images/generations`, {
+            method: 'POST', headers, body, signal: controller.signal,
+          });
+        } catch (e) {
+          clearTimeout(timer);
+          lastError = e;
+          if (attempt < MAX_RETRIES) {
+            const delay = RETRY_DELAY_MS * attempt;
+            console.log(`[AI] Background generation network error, retry ${attempt}/${MAX_RETRIES - 1} after ${delay}ms`);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+          throw e;
+        }
+        clearTimeout(timer);
+        if (resp.ok) {
+          data = await resp.json();
+          lastError = null;
+          break;
+        }
         const errBody = await resp.text();
         console.error(`[AI] Upstream error ${resp.status}: ${errBody}`);
-        throw new Error(`upstream ${resp.status}: ${errBody}`);
+        const retryable = resp.status === 429
+          || isModelUnavailableError(errBody)
+          || isQueryEngineError(errBody)
+          || isDoRequestError(errBody);
+        lastError = new Error(`upstream ${resp.status}: ${errBody}`);
+        if (!retryable || attempt === MAX_RETRIES) throw lastError;
+        const delay = RETRY_DELAY_MS * attempt;
+        console.log(`[AI] Background generation retryable error, retry ${attempt}/${MAX_RETRIES - 1} after ${delay}ms`);
+        await new Promise(r => setTimeout(r, delay));
       }
-  
-      const data = await resp.json();
+      if (!data) throw lastError || new Error('upstream failed');
+
       let imageUrl = '';
       let b64Data = '';
-  
+
       if (data.data && Array.isArray(data.data) && data.data[0]) {
         const item = data.data[0];
         if (item.url) imageUrl = item.url;
         else if (item.b64_json) b64Data = item.b64_json;
       }
-  
+
       if (b64Data) {
         fs.writeFileSync(aiFile, Buffer.from(b64Data, 'base64'));
       } else if (imageUrl) {
@@ -1367,6 +1863,10 @@ async function handleRequest(req, res) {
         if (newConfig.apiKeys) config.apiKeys = newConfig.apiKeys;
         if (newConfig.listenAddr) config.listenAddr = newConfig.listenAddr;
         if (newConfig.testMode !== undefined) config.testMode = newConfig.testMode;
+        if (newConfig.localOverwrite !== undefined) {
+          const v = newConfig.localOverwrite;
+          config.localOverwrite = (typeof v === 'string' && v.trim()) ? v.trim().toLowerCase().split(/[-_]/)[0].slice(0, 8) : null;
+        }
         if (newConfig.wallpaperMode) config.wallpaperMode = newConfig.wallpaperMode;
         if (newConfig.wallpaperPrompt !== undefined) config.wallpaperPrompt = newConfig.wallpaperPrompt;
         if (Array.isArray(newConfig.enabledModels)) config.enabledModels = newConfig.enabledModels;
@@ -1704,9 +2204,11 @@ async function handleRequest(req, res) {
     if (req.method === 'DELETE') { responseCache.clear(); writeJSON(res, 200, { success: true, cache: responseCache.stats }); return; }
   }
 
+  if (pathname === '/api/i18n') { await handleI18nGet(req, res); return; }
+
   if (pathname === '/api/account') { await handleAccountInfo(req, res); return; }
 
-  if (pathname === '/api/get-plan-status') { await handleStepPlanStatus(req, res); return; }
+  if (pathname === '/api/plan-status') { await handlePlanStatus(req, res); return; }
 
   if (pathname === '/healthz') { await handleHealthz(req, res); return; }
   if (pathname === '/v1/models') { await handleModels(req, res); return; }
@@ -1901,6 +2403,8 @@ async function startServer() {
   }
 
   await fetchRemoteModels();
+
+  prefetchI18nOnStartup().catch(() => {});
 
   const port = parseInt(config.listenAddr.split(':').pop()) || 8082;
 
