@@ -25,6 +25,7 @@ AGNES-PROXY/
 - `AGNES_MODELS_URL` — `https://apihub.agnes-ai.com/v1/models`
 - `PLATFORM_BASE_URL` — `https://platform-backend.agnes-ai.com`
 - `API_KEY_ENV_VAR` — `AGNES_API_KEY`
+- `AGNES_USER_AGENT` — `Agnes2Opencode` (sent as `User-Agent` on every outbound call to Agnes endpoints — chat completions, `/v1/models`, platform login/user/keys/subscription, AI image generation)
 - `loadConfig()` — Loads `.config/config.json` with env var overrides; normalizes `TOKENS` array with per-token fields (`name`, `token`, `email`, `platformUsername`, `platformPassword`, `platformToken`, `platformUser`)
 - `saveConfig()` — Writes config back to `.config/config.json` (serializes `TOKENS`, `ENABLED_MODELS`, cache settings, etc.)
 - `generateAiWallpaperToDisk()` — Generates AI image via `/v1/images/generations` with model `agnes-image-2.1-flash`, saves to `.cache/ai-paper.jpg` (supports both URL-based and base64-encoded responses). Uses the first available token's API key (no subscription check — works with all plans including free). Disabled when no token is configured.
@@ -33,17 +34,17 @@ AGNES-PROXY/
 
 ### 2. UpstreamClient
 
-- `headers(stream)` — Returns Bearer token + Content-Type/Accept/Accept-Encoding headers + platform session cookie
-- `getUserInfo()` — `GET /v1/models` with 10s AbortController timeout to validate API key
-- `chatCompletions(body)` — `POST /v1/chat/completions` with configurable timeout, streaming-aware
+- `headers(stream)` — Returns Bearer token + Content-Type/Accept/Accept-Encoding headers + `User-Agent: Agnes2Opencode` + platform session cookie
+- `getUserInfo()` — `GET /v1/models` with 10s AbortController timeout to validate API key; sends `User-Agent: Agnes2Opencode`
+- `chatCompletions(body)` — `POST /v1/chat/completions` with configurable timeout, streaming-aware; forwards `User-Agent: Agnes2Opencode` on every proxied request
 - `getAccountInfo()` — Returns null (unused)
 - `getStepPlanStatus()` — Returns null (unused)
 - `getPlanStatus()` — Returns null (unused)
 
 ### 3. Platform Login
 
-- `loginToPlatform(username, password)` — `POST ${PLATFORM_BASE_URL}/api/user/login` with 15s timeout; persists credentials back to first token for auto-login on restart
-- `getPlatformHeaders()` — Returns `{ Cookie, Authorization }` for platform API calls
+- `loginToPlatform(username, password)` — `POST ${PLATFORM_BASE_URL}/api/user/login` with 15s timeout; persists credentials back to first token for auto-login on restart; sends `User-Agent: Agnes2Opencode`
+- `getPlatformHeaders()` — Returns `{ Cookie, Authorization, User-Agent: Agnes2Opencode }` for platform API calls
 - `platformGetUserInfo()` — `GET ${PLATFORM_BASE_URL}/api/user/self` to fetch current user data
 - `platformGetUserKeys()` — `GET ${PLATFORM_BASE_URL}/api/token` to list platform API keys (returns previews only)
 - `platformGetTokenKey(tokenId)` — `POST ${PLATFORM_BASE_URL}/api/token/${tokenId}/key` to fetch full API key value

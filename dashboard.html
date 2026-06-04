@@ -456,6 +456,244 @@
     .no-plan-card a:hover {
       color: #79c0ff;
     }
+    .test-chat-card {
+      display: none;
+      margin-top: -10px;
+      margin-bottom: 20px;
+    }
+    .test-chat-card.visible { display: block; }
+    .test-chat-card .card-content {
+      background: rgba(0,0,0,0.4);
+      backdrop-filter: blur(13px) !important;
+      -webkit-backdrop-filter: blur(13px) !important;
+    }
+    .test-chat-header {
+      background: rgba(0,0,0,0.2) !important;
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-size: 12px;
+      color: white;
+      padding: 0.35rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+      z-index: 4;
+    }
+    .test-chat-model-select {
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: white;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: none;
+      letter-spacing: 0.3px;
+      padding: 0.2rem 1.6rem 0.2rem 0.5rem;
+      border-radius: 5px;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 16 16' fill='%23ffffff'><path d='M4 6l4 4 4-4z'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 4px center;
+      background-size: 10px;
+    }
+    .test-chat-model-select:focus {
+      outline: 0;
+      background-color: rgba(255,255,255,0.18);
+      border-color: rgba(255,255,255,0.35);
+    }
+    .test-chat-model-select option {
+      background: #1a1d23;
+      color: white;
+    }
+    .test-chat-body {
+      padding: 8px;
+      position: relative;
+      z-index: 4;
+      backdrop-filter: blur(13px) !important;
+      -webkit-backdrop-filter: blur(13px) !important;
+    }
+    .test-chat-transcript {
+      height: 200px;
+      overflow-y: auto;
+      padding: 6px 8px;
+      margin-bottom: 8px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    .test-chat-transcript::-webkit-scrollbar { width: 6px; }
+    .test-chat-transcript::-webkit-scrollbar-track { background: rgba(255,255,255,0.04); border-radius: 3px; }
+    .test-chat-transcript::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+    .test-chat-msg {
+      font-size: 12px;
+      line-height: 1.45;
+      padding: 6px 8px;
+      border-radius: 6px;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    .test-chat-msg.user {
+      background: rgba(50, 205, 50, 0.12);
+      border: 1px solid rgba(50, 205, 50, 0.25);
+      color: rgba(255,255,255,0.95);
+      align-self: flex-end;
+      max-width: 85%;
+      margin-left: auto;
+    }
+    .test-chat-msg.assistant {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.9);
+      align-self: flex-start;
+      max-width: 92%;
+      margin-right: auto;
+    }
+    .test-chat-pair {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      width: 100%;
+    }
+    .test-chat-pair .test-chat-msg {
+      align-self: auto;
+      margin-left: 0;
+      margin-right: 0;
+      max-width: 100%;
+    }
+    .test-chat-pair .test-chat-msg.user {
+      align-self: flex-end;
+      margin-left: auto;
+      max-width: 85%;
+    }
+    .test-chat-pair .test-chat-msg.assistant {
+      align-self: flex-start;
+      margin-right: auto;
+      max-width: 92%;
+    }
+    .test-chat-msg.assistant.error {
+      background: rgba(220, 53, 69, 0.12);
+      border-color: rgba(220, 53, 69, 0.3);
+      color: rgba(255, 200, 200, 0.95);
+    }
+    .test-chat-msg-role {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 2px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .test-chat-msg-time {
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+      text-transform: none;
+      color: rgba(255,255,255,0.4);
+      font-variant-numeric: tabular-nums;
+    }
+    .test-chat-msg.user .test-chat-msg-role { color: rgba(50, 205, 50, 0.7); }
+    .test-chat-empty {
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      text-align: center;
+      padding: 20px 8px;
+      font-style: italic;
+    }
+    .test-chat-input-row {
+      display: flex;
+      gap: 6px;
+      align-items: stretch;
+    }
+    .test-chat-input {
+      flex: 1;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: white;
+      padding: 0.35rem 0.6rem;
+      font-size: 12px;
+      border-radius: 6px;
+      min-width: 0;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    .test-chat-input:focus {
+      outline: 0;
+      background: rgba(255,255,255,0.18);
+      border-color: rgba(255,255,255,0.35);
+      box-shadow: 0 0 0 0.15rem rgba(102, 126, 234, 0.2);
+    }
+    .test-chat-input::placeholder { color: rgba(255,255,255,0.5); }
+    .test-chat-send {
+      background: rgba(50, 205, 50, 0.2);
+      border: 1px solid rgba(50, 205, 50, 0.5);
+      color: white;
+      padding: 0.35rem 0.7rem;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+    .test-chat-send:hover:not(:disabled) {
+      background: rgba(50, 205, 50, 0.35);
+      border-color: rgba(50, 205, 50, 0.7);
+    }
+    .test-chat-send:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .test-chat-clear {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.7);
+      padding: 0.35rem 0.55rem;
+      font-size: 11px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .test-chat-clear:hover { background: rgba(255,255,255,0.08); color: white; }
+    .test-chat-thinking {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+      font-style: italic;
+    }
+    .test-chat-thinking .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.6);
+      animation: chatDot 1.2s ease-in-out infinite;
+    }
+    .test-chat-thinking .dot:nth-child(2) { animation-delay: 0.2s; }
+    .test-chat-thinking .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes chatDot {
+      0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+      40% { opacity: 1; transform: scale(1.1); }
+    }
   </style>
 </head>
 <body>
@@ -548,6 +786,31 @@
             </div>
             <div class="card-body collapse-section" id="section-models">
               <div id="modelsContainer"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card test-chat-card" id="testChatCard" data-glass>
+          <div class="glass-panel"></div>
+          <div class="card-content">
+            <div class="test-chat-header">
+              <span><i class="bi bi-chat-dots-fill me-2"></i>Test Chat</span>
+              <div class="d-flex align-items-center gap-2">
+                <select class="test-chat-model-select" id="testChatModelSelect" onchange="onTestChatModelChange()">
+                  <option value="agnes-2.0-flash" selected>Agnes 2.0 Flash</option>
+                  <option value="agnes-1.5-flash">Agnes 1.5 Flash</option>
+                </select>
+                <button class="test-chat-clear" id="testChatClearBtn" onclick="clearTestChat()" title="Clear conversation"><i class="bi bi-trash3"></i></button>
+              </div>
+            </div>
+            <div class="test-chat-body">
+              <div class="test-chat-transcript" id="testChatTranscript">
+                <div class="test-chat-empty" id="testChatEmpty">Ask <span id="testChatModelName">Agnes 2.0 Flash</span> anything to test your API key.</div>
+              </div>
+              <div class="test-chat-input-row">
+                <input type="text" class="test-chat-input" id="testChatInput" placeholder="Type a message..." maxlength="2000" autocomplete="off">
+                <button class="test-chat-send" id="testChatSendBtn" onclick="sendTestChat()"><i class="bi bi-send-fill"></i><span>Send</span></button>
+              </div>
             </div>
           </div>
         </div>
@@ -939,11 +1202,30 @@
         const r = await fetch('/api/keys');
         const d = await r.json();
         const realKeys = (d.keys || []).filter(k => k.key);
+        const prevHasImageGen = hasImageGen;
         hasImageGen = realKeys.length > 0;
         updateAiWallpaperButton();
         const aiRadio = document.getElementById('wp-ai');
         const bingRadio = document.getElementById('wp-bing');
-        if (aiRadio?.checked && !hasImageGen) {
+        if (hasImageGen && !prevHasImageGen && !aiRadio?.checked) {
+          if (aiRadio) aiRadio.checked = true;
+          if (bingRadio) bingRadio.checked = false;
+          applyWallpaper('ai');
+          await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallpaperMode: 'ai' }),
+          }).catch(() => {});
+        } else if (!hasImageGen && prevHasImageGen && aiRadio?.checked) {
+          aiRadio.checked = false;
+          if (bingRadio) bingRadio.checked = true;
+          applyWallpaper('bing');
+          await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallpaperMode: 'bing' }),
+          }).catch(() => {});
+        } else if (aiRadio?.checked && !hasImageGen) {
           aiRadio.checked = false;
           if (bingRadio) bingRadio.checked = true;
           applyWallpaper('bing');
@@ -1301,8 +1583,10 @@
             <i class="bi bi-key" style="font-size:2rem;color:rgba(255,255,255,0.4)"></i>
             <p class="mt-2 text-muted">Add a key to see available models</p>
           </div>`;
+        setTestChatVisible(false);
         return;
       }
+      setTestChatVisible(true);
       document.getElementById('modelCountBadge').textContent = models.length;
       if (models.length === 0) { container.innerHTML = '<p class="text-muted">No models available</p>'; return; }
       const enabledSet = new Set(enabledModels || models);
@@ -2016,7 +2300,7 @@
         const planNameEl = document.getElementById('planName');
         const planExpiryEl = document.getElementById('planExpiry');
         const planLegendEl = document.getElementById('planLegend');
-        if (planLegendEl) { planLegendEl.textContent = 'NO KEYS'; planLegendEl.title = ''; }
+        if (planLegendEl) { planLegendEl.textContent = 'Free mode'; planLegendEl.title = ''; }
         // Hide the entire plan stats row (Free Access block + fake usage dashboard) when no plan
         const planCol = document.getElementById('planColumn');
         const fiveCol = document.getElementById('fiveHourColumn');
@@ -2135,6 +2419,216 @@
     window.addEventListener('resize', () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(initLiquidGlass, 150);
+    });
+
+    // Test Chat
+    let testChatModel = 'agnes-2.0-flash';
+    const TEST_CHAT_HISTORY_LIMIT = 4;
+    let testChatHistory = [];
+    let testChatBusy = false;
+    let testChatTranscriptEl = null;
+    let testChatInputEl = null;
+    let testChatSendBtnEl = null;
+
+    function formatLocalTime(ts) {
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return '';
+      const pad = n => n < 10 ? '0' + n : '' + n;
+      return pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+
+    function onTestChatModelChange() {
+      const sel = document.getElementById('testChatModelSelect');
+      if (!sel) return;
+      const newModel = sel.value;
+      if (newModel === testChatModel) return;
+      testChatModel = newModel;
+      updateTestChatEmptyText();
+      if (testChatHistory.length > 0) {
+        testChatHistory = [];
+        renderTestChatMessages();
+        showToast('Model switched to ' + newModel + ' — conversation cleared', 'info');
+      } else {
+        showToast('Model switched to ' + newModel, 'info');
+      }
+    }
+
+    function formatTestChatModelName(model) {
+      if (model === 'agnes-2.0-flash') return 'Agnes 2.0 Flash';
+      if (model === 'agnes-1.5-flash') return 'Agnes 1.5 Flash';
+      return model;
+    }
+
+    function updateTestChatEmptyText() {
+      const el = document.getElementById('testChatModelName');
+      if (el) el.textContent = formatTestChatModelName(testChatModel);
+    }
+
+    updateTestChatEmptyText();
+
+    function setTestChatVisible(visible) {
+      const card = document.getElementById('testChatCard');
+      if (!card) return;
+      card.classList.toggle('visible', !!visible);
+      if (visible) setTimeout(() => initLiquidGlass(), 50);
+    }
+
+    function getTestChatEls() {
+      if (!testChatTranscriptEl) testChatTranscriptEl = document.getElementById('testChatTranscript');
+      if (!testChatInputEl) testChatInputEl = document.getElementById('testChatInput');
+      if (!testChatSendBtnEl) testChatSendBtnEl = document.getElementById('testChatSendBtn');
+      return { transcript: testChatTranscriptEl, input: testChatInputEl, send: testChatSendBtnEl };
+    }
+
+    function clearTestChat() {
+      testChatHistory = [];
+      const { transcript } = getTestChatEls();
+      if (!transcript) return;
+        transcript.innerHTML = '<div class="test-chat-empty" id="testChatEmpty">Ask <span id="testChatModelName">' + escapeHtml(formatTestChatModelName(testChatModel)) + '</span> anything to test your API key.</div>';
+    }
+
+    function renderTestChatMessages() {
+      const { transcript } = getTestChatEls();
+      if (!transcript) return;
+      if (testChatHistory.length === 0) {
+        transcript.innerHTML = '<div class="test-chat-empty" id="testChatEmpty">Ask <span id="testChatModelName">' + escapeHtml(formatTestChatModelName(testChatModel)) + '</span> anything to test your API key.</div>';
+        return;
+      }
+      const last = testChatHistory.slice(-TEST_CHAT_HISTORY_LIMIT);
+      const pairs = [];
+      for (let i = 0; i < last.length; i++) {
+        const m = last[i];
+        if (m.role === 'user') {
+          const next = last[i + 1];
+          if (next && next.role === 'assistant') {
+            pairs.push({ user: m, assistant: next });
+            i++;
+            continue;
+          }
+          pairs.push({ user: m, assistant: null });
+        } else if (m.role === 'assistant') {
+          pairs.push({ user: null, assistant: m });
+        }
+      }
+      const html = pairs.map(p => {
+        const userHtml = p.user ? (() => {
+          const cls = `test-chat-msg user`;
+          const ts = p.user.ts ? `<span class="test-chat-msg-time">${formatLocalTime(p.user.ts)}</span>` : '';
+          return `<div class="${cls}"><div class="test-chat-msg-role">${ts}<span>You</span></div><div class="test-chat-msg-content">${escapeHtml(p.user.content || '')}</div></div>`;
+        })() : '';
+        const assistantHtml = p.assistant ? (() => {
+          const isError = !!p.assistant.error;
+          const cls = `test-chat-msg assistant${isError ? ' error' : ''}`;
+          const ts = p.assistant.ts ? `<span class="test-chat-msg-time">${formatLocalTime(p.assistant.ts)}</span>` : '';
+          return `<div class="${cls}"><div class="test-chat-msg-role">${ts}<span>Agnes</span></div><div class="test-chat-msg-content">${escapeHtml(p.assistant.content || '')}</div></div>`;
+        })() : `<div class="test-chat-msg assistant test-chat-thinking-wrap"><div class="test-chat-msg-role"><span class="test-chat-msg-time">…</span><span>Agnes</span></div><div class="test-chat-msg-content"><span class="test-chat-thinking"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div></div>`;
+        return `<div class="test-chat-pair">${userHtml}${assistantHtml}</div>`;
+      }).join('');
+      transcript.innerHTML = html;
+    }
+
+    function setTestChatBusy(busy) {
+      testChatBusy = !!busy;
+      const { input, send } = getTestChatEls();
+      if (input) input.disabled = testChatBusy;
+      if (send) {
+        send.disabled = testChatBusy;
+        if (testChatBusy) {
+          send.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" style="width:10px;height:10px"></span><span>Sending</span>';
+        } else {
+          send.innerHTML = '<i class="bi bi-send-fill"></i><span>Send</span>';
+        }
+      }
+    }
+
+    function appendAssistantThinking(pair) {
+      if (!pair) return null;
+      const div = document.createElement('div');
+      div.className = 'test-chat-msg assistant test-chat-thinking-wrap';
+      div.innerHTML = '<div class="test-chat-msg-role"><span>Agnes</span></div><div class="test-chat-msg-content"><span class="test-chat-thinking"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>';
+      pair.appendChild(div);
+      const { transcript } = getTestChatEls();
+      if (transcript) transcript.scrollTop = transcript.scrollHeight;
+      return div;
+    }
+
+    function setAssistantBubble(thinkingEl, role, content, ts, isError) {
+      if (!thinkingEl) return;
+      thinkingEl.classList.remove('test-chat-thinking-wrap');
+      if (isError) thinkingEl.classList.add('error');
+      const tsStr = ts ? `<span class="test-chat-msg-time">${formatLocalTime(ts)}</span>` : '';
+      thinkingEl.innerHTML = `<div class="test-chat-msg-role">${tsStr}<span>${role}</span></div><div class="test-chat-msg-content">${escapeHtml(content || '')}</div>`;
+      const { transcript } = getTestChatEls();
+      if (transcript) transcript.scrollTop = transcript.scrollHeight;
+    }
+
+    function prependUserBubble(text, ts) {
+      const { transcript } = getTestChatEls();
+      if (!transcript) return null;
+      if (transcript.querySelector('.test-chat-empty')) transcript.innerHTML = '';
+      const pair = document.createElement('div');
+      pair.className = 'test-chat-pair';
+      pair.innerHTML = `<div class="test-chat-msg user"><div class="test-chat-msg-role"><span class="test-chat-msg-time">${formatLocalTime(ts)}</span><span>You</span></div><div class="test-chat-msg-content">${escapeHtml(text)}</div></div>`;
+      transcript.appendChild(pair);
+      transcript.scrollTop = transcript.scrollHeight;
+      return pair;
+    }
+
+    async function sendTestChat() {
+      const { input } = getTestChatEls();
+      if (!input) return;
+      const text = input.value.trim();
+      if (!text || testChatBusy) return;
+      const ts = Date.now();
+      testChatHistory.push({ role: 'user', content: text, ts });
+      const pair = prependUserBubble(text, ts);
+      input.value = '';
+      setTestChatBusy(true);
+      const thinkingEl = appendAssistantThinking(pair);
+      try {
+        const resp = await fetch('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: testChatModel,
+            stream: false,
+            messages: testChatHistory.map(m => ({ role: m.role, content: m.content })),
+          }),
+        });
+        const data = await resp.json();
+        let assistantMsg;
+        if (!resp.ok) {
+          const errMsg = data?.error?.message || data?.error || ('HTTP ' + resp.status);
+          assistantMsg = { role: 'assistant', content: errMsg, error: true, ts: Date.now() };
+        } else {
+          const reply = data?.choices?.[0]?.message?.content || '(no response)';
+          assistantMsg = { role: 'assistant', content: reply, ts: Date.now() };
+        }
+        setAssistantBubble(thinkingEl, 'Agnes', assistantMsg.content, assistantMsg.ts, !!assistantMsg.error);
+        testChatHistory.push(assistantMsg);
+        if (testChatHistory.length > TEST_CHAT_HISTORY_LIMIT) {
+          testChatHistory = testChatHistory.slice(-TEST_CHAT_HISTORY_LIMIT);
+          renderTestChatMessages();
+        }
+      } catch (e) {
+        const errText = 'Error: ' + (e?.message || 'request failed');
+        setAssistantBubble(thinkingEl, 'Agnes', errText, Date.now(), true);
+        testChatHistory.push({ role: 'assistant', content: errText, error: true, ts: Date.now() });
+        if (testChatHistory.length > TEST_CHAT_HISTORY_LIMIT) {
+          testChatHistory = testChatHistory.slice(-TEST_CHAT_HISTORY_LIMIT);
+        }
+      } finally {
+        setTestChatBusy(false);
+        const { input: i2 } = getTestChatEls();
+        if (i2) i2.focus();
+      }
+    }
+
+    document.getElementById('testChatInput')?.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendTestChat();
+      }
     });
   </script>
 </body>

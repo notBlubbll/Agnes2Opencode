@@ -13,6 +13,7 @@ const AGNES_API_BASE = 'https://apihub.agnes-ai.com';
 const AGNES_MODELS_URL = 'https://apihub.agnes-ai.com/v1/models';
 const PLATFORM_BASE_URL = 'https://platform-backend.agnes-ai.com';
 const API_KEY_ENV_VAR = 'AGNES_API_KEY';
+const AGNES_USER_AGENT = 'Agnes2Opencode';
 
 const IS_BUN = typeof Bun !== 'undefined';
 const RUNTIME_VERSION = IS_BUN ? Bun.version : process.version.replace('v', '');
@@ -298,6 +299,7 @@ class UpstreamClient {
       'Content-Type': 'application/json',
       'Accept': stream ? 'text/event-stream' : 'application/json',
       'Accept-Encoding': 'identity',
+      'User-Agent': AGNES_USER_AGENT,
     };
     if (platformSession.token) {
       base['Cookie'] = `token=${platformSession.token}`;
@@ -312,7 +314,7 @@ class UpstreamClient {
     try {
       const resp = await fetch(requestURL, {
         method: 'GET',
-        headers: { 'Authorization': `Bearer ${this.apiKey}` },
+        headers: { 'Authorization': `Bearer ${this.apiKey}`, 'User-Agent': AGNES_USER_AGENT },
         signal: controller.signal
       });
       clearTimeout(timer);
@@ -359,6 +361,7 @@ async function loginToPlatform(username, password) {
       headers: {
         'Content-Type': 'application/json',
         'X-User-Language': 'en',
+        'User-Agent': AGNES_USER_AGENT,
       },
       signal: controller.signal,
     });
@@ -404,6 +407,7 @@ function getPlatformHeaders() {
   return {
     'Cookie': `token=${platformSession.token}`,
     'Authorization': `Bearer ${platformSession.token}`,
+    'User-Agent': AGNES_USER_AGENT,
   };
 }
 
@@ -509,7 +513,7 @@ async function fetchRemoteModels() {
 
     const resp = await fetch(AGNES_MODELS_URL, {
       method: 'GET',
-      headers: apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {},
+      headers: apiKey ? { 'Authorization': `Bearer ${apiKey}`, 'User-Agent': AGNES_USER_AGENT } : { 'User-Agent': AGNES_USER_AGENT },
       signal: controller.signal
     });
     clearTimeout(timer);
@@ -1201,6 +1205,7 @@ async function generateAiWallpaperToDisk() {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'User-Agent': AGNES_USER_AGENT,
         },
         body: JSON.stringify({
           model: 'agnes-image-2.1-flash',
