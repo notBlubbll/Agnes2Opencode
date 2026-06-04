@@ -1603,7 +1603,7 @@ async function proxyImageRequest(res, payload, requestedModel) {
             }
             if (s === 'queued') {
               if (queuedSince === 0) queuedSince = Date.now();
-              else if (Date.now() - queuedSince > 30000) {
+              else if (Date.now() - queuedSince > 300000) {
                 content = `Video stuck in queue — likely requires a paid plan (video_gen feature). Task ID: ${taskId}`;
                 break;
               }
