@@ -17,5 +17,7 @@
   ],
   "author": "",
   "license": "MIT",
-  "dependencies": {}
+  "dependencies": {
+    "ws": "^8.21.0"
+  }
 }

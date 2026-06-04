@@ -26,7 +26,7 @@ Also a techdemo that demonstrates interaction with the api, including authed api
 - **Multi-Key Support** — Rotate between multiple Agnes AI API keys with fingerprint-based sticky sessions
 - **AI Wallpaper** — Generate AI image or video backgrounds via Agnes AI models, auto-enabled when a key is saved
 - **AI Video Wallpaper** — Generate looping muted videos via `agnes-video-v2.0` with real-time SSE progress on the dashboard
-- **Wallpaper Progress (SSE)** — Live `generating...` / `(X%)` indicators on wallpaper mode buttons via Server-Sent Events
+- **Wallpaper Progress (WS)** — Live blue `(generating...)` / `(generating... XX%)` indicators next to the AI Prompt label via WebSocket broadcast; restores in-progress state on dashboard reconnect via `/api/wallpaper-progress`
 - **Favicon from Video** — Extracts first video frame to canvas for circular favicon when using video wallpaper
 - **Plan Status** — View subscription status, usage windows, and billing info from the dashboard
 - **Retry Logic** — Automatic retry with exponential backoff for transient errors (model unavailable, query engine)
@@ -211,7 +211,7 @@ Access at `http://localhost:8080`:
 - **Platform Login** — Login with Agnes AI account, add multiple accounts, view account info, logout
 - **Retrieve Keys from Platform** — Fetch API keys from logged-in platform account, select and apply with auto-fill
 - **Apply API Key Modal** — Post-login modal that fetches platform keys, shows previews, fetches full key on selection
-- **Wallpaper Toggle** — Switch between None, Bing, AI Image, and AI Video modes with separate configurable prompts; AI Image shows `generating...` on the button, AI Video shows `(X%)` progress — all via SSE in real time
+- **Wallpaper Toggle** — Switch between None, Bing, AI Image, and AI Video modes with separate configurable prompts; progress shows as blue `(generating...)` / `(generating... XX%)` next to the AI Prompt label — broadcast via WebSocket in real time
 - **Collapsible Sections** — Models, API Key, Quick Actions, Environment, Proxy Configuration
 - **Auto-refresh** — Health check every 15s, plan status every 30s
 - **Autotranslate (beta)** — Bottom-left checkbox that translates every UI string via Agnes AI. When `TEST_MODE` is on or `LOCAL_OVERWRITE` is set in config, the toggle is forced ON and locked.

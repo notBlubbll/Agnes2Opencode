@@ -1029,7 +1029,7 @@
                 </div>
               </div>
               <div class="mb-2" id="aiPromptContainer" style="display:none">
-                <label class="form-label" style="font-size:10px;margin-bottom:2px;color:rgba(255,255,255,0.5)" data-i18n="wp_ai_prompt">AI Prompt</label>
+                <label class="form-label" id="aiPromptLabel" style="font-size:10px;margin-bottom:2px;color:rgba(255,255,255,0.5)" data-i18n="wp_ai_prompt">AI Prompt</label>
                 <input type="text" class="form-control form-control-sm" id="aiPromptInput" placeholder="Image prompt..." data-i18n-placeholder="wp_ai_placeholder" style="background:rgba(0,0,0,0.3);border-color:rgba(255,255,255,0.15);color:white;font-size:11px">
               </div>
               <div class="mb-2">
@@ -1431,7 +1431,7 @@
     let _serverForcedLocale = null;
     async function fetchServerForcedLocale() {
       try {
-        const r = await fetch('/api/i18n?config=1');
+        const r = await wsFetch('/api/i18n?config=1');
         if (!r.ok) return null;
         const d = await r.json();
         _serverForcedLocale = d.forced_locale || null;
@@ -1459,7 +1459,7 @@
       const u = new URL('/api/i18n', location.origin);
       u.searchParams.set('locale', locale);
       if (withGenerate) u.searchParams.set('generate', '1');
-      const resp = await fetch(u.toString());
+      const resp = await wsFetch(u.toString());
       if (!resp.ok) throw new Error('i18n http ' + resp.status);
       return await resp.json();
     }
@@ -1563,9 +1563,9 @@
 
     async function syncAiWallpaperWithKeys() {
       try {
-        const r = await fetch('/api/keys');
+        const r = await wsFetch('/api/keys');
         const d = await r.json();
-        const realKeys = (d.keys || []).filter(k => k.key);
+        const realKeys = (d.keys || []).filter(function(k) { return k.key; });
         const prevHasImageGen = hasImageGen;
         hasImageGen = realKeys.length > 0;
         updateAiWallpaperButton();
@@ -1575,31 +1575,19 @@
           if (aiRadio) aiRadio.checked = true;
           if (bingRadio) bingRadio.checked = false;
           applyWallpaper('ai');
-          await fetch('/api/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallpaperMode: 'ai' }),
-          }).catch(() => {});
+          wsCall('POST', '/api/config', { wallpaperMode: 'ai' }).catch(function() {});
         } else if (!hasImageGen && prevHasImageGen && aiRadio?.checked) {
           aiRadio.checked = false;
           if (bingRadio) bingRadio.checked = true;
           applyWallpaper('bing');
-          await fetch('/api/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallpaperMode: 'bing' }),
-          }).catch(() => {});
+          await wsCall('POST', '/api/config', { wallpaperMode: 'bing' }).catch(function() {});
         } else if (aiRadio?.checked && !hasImageGen) {
           aiRadio.checked = false;
           if (bingRadio) bingRadio.checked = true;
           applyWallpaper('bing');
-          await fetch('/api/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallpaperMode: 'bing' }),
-          }).catch(() => {});
+          await wsCall('POST', '/api/config', { wallpaperMode: 'bing' }).catch(function() {});
         }
-        const enabledResp = await fetch('/api/config');
+        const enabledResp = await wsFetch('/api/config');
         const enabledData = await enabledResp.json();
         renderModels(enabledData.enabledModels || enabledData.ENABLED_MODELS);
         renderTokenPools();
@@ -1608,12 +1596,12 @@
 
     async function probeApiKey(silent = false) {
       try {
-        const keysResp = await fetch('/api/keys');
+        const keysResp = await wsFetch('/api/keys');
         const kd = await keysResp.json();
         const realKeys = (kd.keys || []).filter(k => k.key);
         if (realKeys.length === 0) return false;
         markKeyStatus('checking');
-        const r = await fetch('/v1/chat/completions', {
+        const r = await wsFetch('/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1688,7 +1676,7 @@
         const bingRadio = document.getElementById('wp-bing');
         if (bingRadio) bingRadio.checked = true;
         applyWallpaper('bing');
-        fetch('/api/config', {
+        wsFetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ wallpaperMode: 'bing' }),
@@ -1844,9 +1832,9 @@
 
     async function loadConfiguration() {
       try {
-        const healthResponse = await fetch('/healthz');
+        const healthResponse = await wsFetch('/healthz');
         proxyData = await healthResponse.json();
-        const configResponse = await fetch('/api/config');
+        const configResponse = await wsFetch('/api/config');
         const configData = await configResponse.json();
         if (configData) {
           config = configData;
@@ -1855,8 +1843,8 @@
           if (document.getElementById('requestTimeout')) document.getElementById('requestTimeout').value = configData.requestTimeout || '15m';
           const mode = configData.wallpaperMode || 'bing';
           applyWallpaper(mode);
-          if (mode === 'ai') { startProgressPoll(false); fetch('/api/generate-image', { method: 'POST' }).catch(() => {}); }
-          if (mode === 'ai-video') { startProgressPoll(false); fetch('/api/generate-video', { method: 'POST' }).catch(() => {}); }
+          if (mode === 'ai') { startProgressPoll(false); wsFetch('/api/generate-image', { method: 'POST' }).catch(() => {}); }
+          if (mode === 'ai-video') { startProgressPoll(false); wsFetch('/api/generate-video', { method: 'POST' }).catch(() => {}); }
           if (document.getElementById('aiPromptInput')) {
             const defMode = configData.wallpaperMode || 'bing';
             const val = defMode === 'ai-video' ? configData.video_prompt : configData.img_prompt;
@@ -1864,7 +1852,7 @@
             document.getElementById('aiPromptInput').placeholder = defMode === 'ai-video' ? (t('wp_video_placeholder', 'Video prompt...')) : (t('wp_ai_placeholder', 'Image prompt...'));
           }
         }
-        const modelsResponse = await fetch('/api/models');
+        const modelsResponse = await wsFetch('/api/models');
         const modelsData = await modelsResponse.json();
         if (modelsData && modelsData.models) { models = modelsData.allModels || modelsData.models; modelMeta = modelsData.meta || {}; renderModels(modelsData.models); }
         renderTokenPools();
@@ -1881,7 +1869,7 @@
     async function openKeysModal() {
       try {
         hideAllModals();
-        const [keysResp, acctResp] = await Promise.all([fetch('/api/keys'), fetch('/api/account')]);
+        const [keysResp, acctResp] = await Promise.all([wsFetch('/api/keys'), wsFetch('/api/account')]);
         const data = await keysResp.json();
         accountData = await acctResp.json();
         const keys = data.keys || [];
@@ -2000,7 +1988,7 @@
       const platformUser = (accountData?.platform_users && accountData.platform_users.length > 0)
         ? (accountData.platform_users[0].username || '') : '';
       try {
-        const r = await fetch('/api/keys', {
+        const r = await wsFetch('/api/keys', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'add', name, key, platformUser })
@@ -2021,7 +2009,7 @@
     function startEditKey(index) {
       editingIndex = index;
       deleteIndex = -1;
-      fetch('/api/keys').then(d => d.json()).then(data => {
+      wsFetch('/api/keys').then(d => d.json()).then(data => {
         renderKeysList(data.keys);
         const key = data.keys?.[index];
         if (key?.session) {
@@ -2032,14 +2020,14 @@
 
     function cancelEditKey() {
       editingIndex = -1;
-      fetch('/api/keys').then(d => d.json()).then(data => renderKeysList(data.keys));
+      wsFetch('/api/keys').then(d => d.json()).then(data => renderKeysList(data.keys));
     }
 
     async function saveEditKey(index) {
       const name = document.getElementById('editKeyName').value.trim();
       const key = document.getElementById('editKey').value.trim();
       try {
-        const r = await fetch('/api/keys', {
+        const r = await wsFetch('/api/keys', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'update', index, name, key })
@@ -2059,17 +2047,17 @@
     function startDeleteKey(index) {
       deleteIndex = index;
       editingIndex = -1;
-      fetch('/api/keys').then(d => d.json()).then(data => renderKeysList(data.keys));
+      wsFetch('/api/keys').then(d => d.json()).then(data => renderKeysList(data.keys));
     }
 
     function cancelDeleteKey() {
       deleteIndex = -1;
-      fetch('/api/keys').then(d => d.json()).then(data => renderKeysList(data.keys));
+      wsFetch('/api/keys').then(d => d.json()).then(data => renderKeysList(data.keys));
     }
 
     async function confirmDeleteKey(index) {
       try {
-        const r = await fetch('/api/keys', {
+        const r = await wsFetch('/api/keys', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'delete', index })
@@ -2183,7 +2171,7 @@
       const stateLabel = isEnabled ? t('model_disabled', 'disabled') : t('model_enabled', 'enabled');
       showToast(`${displayName} ${stateLabel}`, 'info');
       try {
-        const resp = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabledModels }) });
+        const resp = await wsFetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabledModels }) });
         const data = await resp.json();
         if (!data.success) showToast(t('model_saved_fail', 'Failed to save model settings'), 'danger');
       } catch (e) { showToast(t('model_saved_fail', 'Failed to save model settings'), 'danger'); }
@@ -2196,7 +2184,7 @@
 
     async function checkHealth(silent = false) {
       try {
-        const response = await fetch('/healthz');
+        const response = await wsFetch('/healthz');
         const data = await response.json();
         if (data.ok) {
           proxyData = data;
@@ -2217,7 +2205,7 @@
 
     async function testConnection() {
       try {
-        const response = await fetch('/v1/models');
+        const response = await wsFetch('/v1/models');
         if (response.ok) {
           const data = await response.json();
           const msg = t('toast_connected', 'Connected! {n} models available').replace('{n}', data.data?.length || 0);
@@ -2276,7 +2264,7 @@
       statusEl.style.display = 'block';
       statusEl.innerHTML = '<small class="text-info">' + escapeHtml(t('toast_logging_in', 'Logging in...')) + '</small>';
       try {
-        const loginResp = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+        const loginResp = await wsFetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
         const loginData = await loginResp.json();
         if (loginData.success) {
           const loggedInTpl = t('toast_logged_in_as', 'Logged in as {email}');
@@ -2329,7 +2317,7 @@
       if (existing) existing.show();
       else new bootstrap.Modal(modalEl).show();
       try {
-        const resp = await fetch('/api/platform/keys');
+        const resp = await wsFetch('/api/platform/keys');
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || t('toast_failed_load_keys', 'Failed to load keys'));
         const keys = data.keys || [];
@@ -2405,7 +2393,7 @@
       hint.textContent = t('apply_key_fetching', 'Fetching full key...');
       hint.style.color = 'rgba(255,255,255,0.5)';
       try {
-        const r = await fetch('/api/platform/token/' + encodeURIComponent(key.id) + '/key');
+        const r = await wsFetch('/api/platform/token/' + encodeURIComponent(key.id) + '/key');
         const d = await r.json();
         if (d.key) {
           valueInput.value = d.key;
@@ -2449,7 +2437,7 @@
       const savingTpl = t('apply_key_saving', 'Saving {name}...');
       statusEl.innerHTML = '<small class="text-info">' + escapeHtml(savingTpl.replace('{name}', tokenName)) + '</small>';
       try {
-        const kr = await fetch('/api/keys');
+        const kr = await wsFetch('/api/keys');
         const kd = await kr.json();
         const existing = (kd.keys || []);
         let existingIdx = -1;
@@ -2459,24 +2447,24 @@
           }
         }
         if (existingIdx >= 0) {
-          const ui = await fetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', index: existingIdx, name: tokenName, platformUser: _applyKeyUsername }) });
+          const ui = await wsFetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', index: existingIdx, name: tokenName, platformUser: _applyKeyUsername }) });
           const ud = await ui.json();
           if (ud.success) {
             const tpl = t('apply_key_updated', 'Key updated: {name}');
             showToast(tpl.replace('{name}', escapeHtml(tokenName)), 'success');
-            fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallpaperMode: 'ai' }) }).catch(() => {});
+            wsFetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallpaperMode: 'ai' }) }).catch(() => {});
             const wpAi = document.getElementById('wp-ai');
             if (wpAi) wpAi.checked = true;
             loadConfiguration().then(() => { hideAllModals(); checkHealth(true); fetchPlanStatus(); openKeysModal(); });
             return;
           }
         }
-        const addResp = await fetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', name: tokenName, key: tokenValue, platformUser: _applyKeyUsername }) });
+        const addResp = await wsFetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add', name: tokenName, key: tokenValue, platformUser: _applyKeyUsername }) });
         const addData = await addResp.json();
         if (addData.success) {
           const tpl = t('apply_key_added', 'Key added: {name}');
           showToast(tpl.replace('{name}', escapeHtml(tokenName)), 'success');
-          fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallpaperMode: 'ai' }) }).catch(() => {});
+          wsFetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallpaperMode: 'ai' }) }).catch(() => {});
           const wpAi = document.getElementById('wp-ai');
           if (wpAi) wpAi.checked = true;
           loadConfiguration().then(() => { hideAllModals(); checkHealth(true); fetchPlanStatus(); openKeysModal(); });
@@ -2494,7 +2482,7 @@
     }
 
     async function retrievePlatformKeys() {
-      const platformLogged = await (await fetch('/api/account')).json();
+      const platformLogged = await (await wsFetch('/api/account')).json();
       if (!platformLogged.logged_in) {
         bootstrap.Modal.getInstance(document.getElementById('keysModal'))?.hide();
         setTimeout(openPlatformLoginModal, 300);
@@ -2508,7 +2496,7 @@
     async function platformLogout() {
       try {
         hideAllModals();
-        const r = await fetch('/api/logout', { method: 'POST' });
+        const r = await wsFetch('/api/logout', { method: 'POST' });
         const data = await r.json();
         if (data.success) {
           accountData = null;
@@ -2526,7 +2514,7 @@
       const tpl = t('remove_confirm', 'Logout and remove platform user "{user}"? This will unlink the account from all keys.');
       if (!confirm(tpl.replace('{user}', username))) return;
       try {
-        const r = await fetch('/api/logout', { method: 'POST' });
+        const r = await wsFetch('/api/logout', { method: 'POST' });
         const data = await r.json();
         if (data.success) {
           accountData = null;
@@ -2780,8 +2768,8 @@
       let hasAnyKeys = false;
       try {
         const [planResp, keysResp] = await Promise.all([
-          fetch('/api/plan-status?t=' + Date.now() + '&_=' + Math.random()),
-          fetch('/api/keys')
+          wsFetch('/api/plan-status?t=' + Date.now() + '&_=' + Math.random()),
+          wsFetch('/api/keys')
         ]);
         if (planResp.ok) { realData = await planResp.json(); planData = realData; }
         if (keysResp.ok) { const kd = await keysResp.json(); hasAnyKeys = !!(kd.safe && kd.safe.some(s => s.has_key || s.has_token)); }
@@ -2974,44 +2962,197 @@
       return div.innerHTML;
     }
 
-    let _progressSSE = null;
     function updateGenButtonLabel(kind, progress) {
-      const label = document.querySelector(kind === 'video' ? 'label[for="wp-ai-video"]' : 'label[for="wp-ai"]');
+      const label = document.getElementById('aiPromptLabel');
       if (!label) return;
       let span = label.querySelector('.gen-progress');
-      if (!span) { span = document.createElement('span'); span.className = 'gen-progress'; label.appendChild(span); }
+      if (!span) { span = document.createElement('span'); span.className = 'gen-progress'; styleSpan(span); label.appendChild(span); }
       if (kind === 'image' && progress >= 0 && progress < 100) {
-        span.textContent = ' generating...';
+        span.innerHTML = '<span style="color:#4da6ff">(generating...)</span>';
       } else if (kind === 'video' && progress >= 0 && progress < 100) {
-        span.textContent = ' (' + Math.min(progress, 99) + '%)';
+        span.innerHTML = '<span style="color:#4da6ff">(generating... ' + Math.min(progress, 99) + '%)</span>';
       } else {
-        span.textContent = '';
+        span.innerHTML = '';
       }
     }
-    function startProgressPoll(optimistic) {
-      if (_progressSSE) { _progressSSE.close(); _progressSSE = null; }
+    function styleSpan(s) { s.style.marginLeft = '4px'; s.style.fontSize = '10px'; }
+
+    let dashboardWS = null;
+    let dashboardWSTimeout = null;
+    let _wsCallId = 0;
+    let _wsPending = {};
+    let _wsQueue = [];
+
+    function _flushWSQueue() {
+      var q = _wsQueue;
+      _wsQueue = [];
+      for (var i = 0; i < q.length; i++) {
+        dashboardWS.send(q[i]);
+      }
+    }
+
+    function wsCall(method, path, body, headers) {
+      return new Promise(function(resolve, reject) {
+        var id = ++_wsCallId;
+        var msg = { type: 'rpc', id: id, method: method, path: path };
+        if (body != null) msg.body = typeof body === 'string' ? body : JSON.stringify(body);
+        if (headers) msg.headers = headers;
+        var tid = setTimeout(function() {
+          if (_wsPending[id]) { _wsPending[id].reject(new Error('timeout')); delete _wsPending[id]; }
+        }, 30000);
+        _wsPending[id] = { resolve: resolve, reject: reject, timeout: tid };
+        var data = JSON.stringify(msg);
+        if (dashboardWS && dashboardWS.readyState === WebSocket.OPEN) {
+          dashboardWS.send(data);
+        } else if (dashboardWS && dashboardWS.readyState === WebSocket.CONNECTING) {
+          _wsQueue.push(data);
+        } else {
+          dashboardWS = null;
+          connectDashboardWS();
+          _wsQueue.push(data);
+        }
+      });
+    }
+
+    function wsFetch(url, opts) {
+      var method = 'GET', body = null, headers = null;
+      if (opts) {
+        method = opts.method || 'GET';
+        if (opts.body !== undefined) body = opts.body;
+        headers = opts.headers;
+      }
+      return wsCall(method, url, body, headers).then(function(r) {
+        return {
+          ok: r.status >= 200 && r.status < 300,
+          status: r.status,
+          json: function() { return Promise.resolve(JSON.parse(r.body)); },
+          text: function() { return Promise.resolve(r.body); }
+        };
+      });
+    }
+
+    function _rejectAllPending() {
+      var keys = Object.keys(_wsPending);
+      for (var i = 0; i < keys.length; i++) {
+        var p = _wsPending[keys[i]];
+        clearTimeout(p.timeout);
+        p.reject(new Error('ws disconnected'));
+      }
+      _wsPending = {};
+    }
+
+    let _wsReady = null;
+    let _wsReadyResolve = null;
+
+    function waitForWS() {
+      if (_wsReady) return _wsReady;
+      connectDashboardWS();
+      return _wsReady;
+    }
+
+    function wsCall(method, path, body, headers) {
+      return new Promise(function(resolve, reject) {
+        var id = ++_wsCallId;
+        var msg = { type: 'rpc', id: id, method: method, path: path };
+        if (body != null) msg.body = typeof body === 'string' ? body : JSON.stringify(body);
+        if (headers) msg.headers = headers;
+        var tid = setTimeout(function() {
+          if (_wsPending[id]) { delete _wsPending[id]; reject(new Error('timeout')); }
+        }, 30000);
+        _wsPending[id] = { resolve: resolve, reject: reject, timeout: tid };
+        var data = JSON.stringify(msg);
+        if (dashboardWS && dashboardWS.readyState === WebSocket.OPEN) {
+          dashboardWS.send(data);
+        } else {
+          _wsQueue.push(data);
+          if (!dashboardWS || dashboardWS.readyState === WebSocket.CLOSED || dashboardWS.readyState === WebSocket.CLOSING) {
+            connectDashboardWS();
+          }
+        }
+      });
+    }
+
+    function connectDashboardWS() {
+      if (dashboardWS && (dashboardWS.readyState === WebSocket.CONNECTING || dashboardWS.readyState === WebSocket.OPEN)) return;
+      _wsReady = new Promise(function(r) { _wsReadyResolve = r; });
+      var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      var wsUrl = protocol + '//' + location.host + '/ws';
+      try { dashboardWS = new WebSocket(wsUrl); } catch (e) { _wsReadyResolve = null; _wsReady = null; scheduleWSReconnect(); return; }
+
+      dashboardWS.onopen = function() {
+        dashboardWS.send(JSON.stringify({ type: 'subscribe', channels: ['health', 'plan', 'progress'] }));
+        _flushWSQueue();
+        if (_wsReadyResolve) { _wsReadyResolve(); _wsReadyResolve = null; }
+      };
+
+      dashboardWS.onclose = function() { _rejectAllPending(); _wsReady = null; _wsReadyResolve = null; dashboardWS = null; scheduleWSReconnect(); };
+      dashboardWS.onerror = function() { _rejectAllPending(); _wsReady = null; _wsReadyResolve = null; if (dashboardWS) { dashboardWS.close(); dashboardWS = null; } scheduleWSReconnect(); };
+
+      dashboardWS.onmessage = function(e) {
+        try { var msg = JSON.parse(e.data); } catch(err) { return; }
+        if (msg.type === 'rpc_result' && _wsPending[msg.id]) {
+          clearTimeout(_wsPending[msg.id].timeout);
+          _wsPending[msg.id].resolve({ status: msg.status, body: msg.body });
+          delete _wsPending[msg.id];
+          return;
+        }
+        if (msg.type === 'rpc_error' && _wsPending[msg.id]) {
+          clearTimeout(_wsPending[msg.id].timeout);
+          _wsPending[msg.id].reject(new Error(msg.error));
+          delete _wsPending[msg.id];
+          return;
+        }
+        if (msg.type === 'health') { handleWSHealth(msg.data); return; }
+        if (msg.type === 'plan') { handleWSPlan(msg.data); return; }
+        if (msg.type === 'progress') { handleWSProgress(msg.data); return; }
+        if (msg.type === 'config_change') { loadConfiguration(); return; }
+      };
+    }
+
+    function scheduleWSReconnect() {
+      if (dashboardWSTimeout) return;
+      dashboardWSTimeout = setTimeout(function() { dashboardWSTimeout = null; connectDashboardWS(); }, 3000);
+    }
+
+    function handleWSHealth(data) {
+      if (!data || !data.ok) return;
+      proxyData = data;
+      document.getElementById('statusIndicator').className = 'status-indicator status-online';
+      document.getElementById('statusText').textContent = data.test_mode ? t('status_test', 'Test') : t('status_online', 'Online');
+      renderTokenPools();
+      updateStats();
+    }
+
+    function handleWSPlan(data) {
+      planData = data;
+      fetchPlanStatus();
+    }
+
+    function handleWSProgress(data) {
+      const mode = document.querySelector('input[name="wallpaper"]:checked')?.value;
+      if (!data.kind) return;
+      updateGenButtonLabel(data.kind, data.progress);
+      if (data.progress >= 100 && ((data.kind === 'image' && mode === 'ai') || (data.kind === 'video' && mode === 'ai-video'))) {
+        if (data.kind === 'video' && mode === 'ai-video') { removeVideoBg(); loadVideoBg(); }
+        if (data.kind === 'image' && mode === 'ai') { document.body.style.background = 'url("/api/bg?t=' + Date.now() + '") center/cover no-repeat fixed'; updateFaviconFromBackground('ai'); }
+      }
+    }
+
+    async function startProgressPoll(optimistic) {
+      _progressSSE = null;
       document.querySelectorAll('.gen-progress').forEach(s => s.textContent = '');
       const mode = document.querySelector('input[name="wallpaper"]:checked')?.value;
-      if (optimistic !== false) {
+      let real = null;
+      try {
+        const r = await fetch('/api/wallpaper-progress');
+        if (r.ok) real = await r.json();
+      } catch (e) {}
+      if (real && real.kind && real.progress >= 0 && real.progress < 100) {
+        updateGenButtonLabel(real.kind, real.progress);
+      } else if (optimistic !== false) {
         if (mode === 'ai') updateGenButtonLabel('image', 0);
         if (mode === 'ai-video') updateGenButtonLabel('video', 0);
       }
-      _progressSSE = new EventSource('/api/wallpaper-progress?_=' + Date.now());
-      _progressSSE.onmessage = function(e) {
-        try {
-          const d = JSON.parse(e.data);
-          const mode = document.querySelector('input[name="wallpaper"]:checked')?.value;
-          if (!d.kind) return;
-          updateGenButtonLabel(d.kind, d.progress);
-          if (d.progress >= 100 && ((d.kind === 'image' && mode === 'ai') || (d.kind === 'video' && mode === 'ai-video'))) {
-            _progressSSE.close();
-            _progressSSE = null;
-            if (d.kind === 'video' && mode === 'ai-video') { removeVideoBg(); loadVideoBg(); }
-            if (d.kind === 'image' && mode === 'ai') { document.body.style.background = 'url("/api/bg?t=' + Date.now() + '") center/cover no-repeat fixed'; updateFaviconFromBackground('ai'); }
-          }
-        } catch (e) { console.warn('[SSE] parse error:', e.message, e.data); }
-      };
-      _progressSSE.onerror = function() { console.warn('[SSE] connection error, readyState:', _progressSSE.readyState); };
     }
 
     document.getElementById('wallpaperGroup')?.addEventListener('change', async function(e) {
@@ -3025,7 +3166,7 @@
         return;
       }
       try {
-        await fetch('/api/config', {
+        await wsFetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ wallpaperMode: mode }),
@@ -3039,7 +3180,7 @@
         input.value = val;
       }
       if (mode === 'ai-video') {
-        fetch('/api/generate-video', { method: 'POST' }).catch(() => {});
+        wsFetch('/api/generate-video', { method: 'POST' }).catch(() => {});
       }
       startProgressPoll();
     });
@@ -3049,33 +3190,33 @@
       if ((mode !== 'ai' && mode !== 'ai-video') || !hasImageGen) return;
       const field = mode === 'ai-video' ? 'video_prompt' : 'img_prompt';
       try {
-        await fetch('/api/config', {
+        await wsFetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ [field]: this.value }),
         });
         if (mode === 'ai-video') {
-          fetch('/api/generate-video', { method: 'POST' }).catch(() => {});
+          wsFetch('/api/generate-video', { method: 'POST' }).catch(() => {});
         } else {
-          fetch('/api/generate-image', { method: 'POST' });
+          wsFetch('/api/generate-image', { method: 'POST' });
         }
         startProgressPoll();
       } catch (e) {}
     });
 
-    Promise.all([
-      loadConfiguration(),
-      checkHealth(),
-      fetchPlanStatus(),
-    ]).then(async () => {
+    waitForWS().then(function() {
+      return Promise.all([
+        loadConfiguration(),
+        checkHealth(),
+        fetchPlanStatus(),
+      ]);
+    }).then(async () => {
       await syncAiWallpaperWithKeys();
       await probeApiKey();
       initLiquidGlass();
       setTimeout(() => window.dispatchEvent(new Event('resize')), 1000);
       setTimeout(() => window.dispatchEvent(new Event('resize')), 3000);
     });
-    setInterval(() => checkHealth(true), 15000);
-    setInterval(() => fetchPlanStatus(), 30000);
     let resizeTimer;
     window.addEventListener('resize', () => {
       clearTimeout(resizeTimer);
@@ -3290,7 +3431,7 @@
       const thinkingEl = appendAssistantThinking(pair);
       const lblAgnes = t('test_chat_role_agnes', 'Agnes');
       try {
-        const resp = await fetch('/v1/chat/completions', {
+        const resp = await wsFetch('/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

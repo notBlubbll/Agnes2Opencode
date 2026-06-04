@@ -8,6 +8,7 @@ const http = require('http');
 const https = require('https');
 const crypto = require('crypto');
 const zlib = require('zlib');
+const { WebSocketServer } = require('ws');
 
 const AGNES_API_BASE = 'https://apihub.agnes-ai.com';
 const AGNES_MODELS_URL = 'https://apihub.agnes-ai.com/v1/models';
@@ -851,6 +852,7 @@ async function loginToPlatform(username, password) {
       if (t.platformUser === username) break;
     }
     saveConfig(config);
+    notifyConfigChange();
     if (prevToken !== access_token || prevUser !== (user?.email)) {
       console.log(`[Platform] Login successful for ${username}`);
     }
@@ -1270,6 +1272,7 @@ function authorized(req) {
 }
 
 function readBody(req) {
+  if (req._body !== undefined) return Promise.resolve(req._body);
   return new Promise((resolve, reject) => {
     const chunks = [];
     req.on('data', chunk => chunks.push(chunk));
@@ -1323,7 +1326,7 @@ function hasApiToken() {
 async function handlePlanStatus(req, res) {
   if (req.method !== 'GET') { writeOpenAIError(res, 405, 'method not allowed', 'invalid_request_error', ''); return; }
   if (config.testMode) {
-    writeJSON(res, 200, {
+    const planData = {
       has_plan: true,
       logged_in: true,
       plan_status: 'active',
@@ -1350,11 +1353,14 @@ async function handlePlanStatus(req, res) {
       windowed: { used: 50, limit: 1000, usage_pct: 5, reset_at: new Date(Date.now() + 5 * 3600000).toISOString(), reset_in_seconds: 18000 },
       weekly: { used: 200, limit: 10000, usage_pct: 2, reset_at: new Date(Date.now() + 7 * 86400000).toISOString(), reset_in_seconds: 604800 },
       image_daily: { used: 10, limit: 100, usage_pct: 10, reset_at: new Date(Date.now() + 24 * 3600000).toISOString(), reset_in_seconds: 86400 },
-    });
+    };
+    globalThis._lastPlanData = planData;
+    writeJSON(res, 200, planData);
     return;
   }
   if (!platformSession.token) {
-    writeJSON(res, 200, { has_plan: false, plan_status: 'none', subscriptions: [], logged_in: false });
+    globalThis._lastPlanData = { has_plan: false, plan_status: 'none', subscriptions: [], logged_in: false };
+    writeJSON(res, 200, globalThis._lastPlanData);
     return;
   }
   try {
@@ -1365,7 +1371,7 @@ async function handlePlanStatus(req, res) {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     const sub = data.data || (Array.isArray(data) ? data[0] : null);
-    if (!sub) { writeJSON(res, 200, { has_plan: false, plan_status: 'none', subscriptions: [], logged_in: true }); return; }
+    if (!sub) { globalThis._lastPlanData = { has_plan: false, plan_status: 'none', subscriptions: [], logged_in: true }; writeJSON(res, 200, globalThis._lastPlanData); return; }
     const statusMap = { active: 'active', pending: 'pending', expired: 'expired', cancelled: 'cancelled' };
     const textGen = sub.usage?.text_generation;
     const windowed = textGen?.windowed || {};
@@ -1374,7 +1380,7 @@ async function handlePlanStatus(req, res) {
     const imgGen = sub.usage?.image_generation;
     const imgDaily = imgGen?.daily || {};
     const subFeatures = sub.features || {};
-    writeJSON(res, 200, {
+    const planData = {
       has_plan: true,
       logged_in: true,
       plan_status: statusMap[sub.status] || 'unknown',
@@ -1402,9 +1408,12 @@ async function handlePlanStatus(req, res) {
       windowed: { used: windowed.used, limit: windowed.limit, usage_pct: windowed.usage_pct, reset_at: windowed.reset_at, reset_in_seconds: windowed.reset_in_seconds },
       weekly: { used: weekly.used, limit: weekly.limit, usage_pct: weekly.usage_pct, reset_at: weekly.reset_at, reset_in_seconds: weekly.reset_in_seconds },
       image_daily: { used: imgDaily.used, limit: imgDaily.limit, usage_pct: imgDaily.usage_pct, reset_at: imgDaily.reset_at, reset_in_seconds: imgDaily.reset_in_seconds },
-    });
+    };
+    globalThis._lastPlanData = planData;
+    writeJSON(res, 200, planData);
   } catch (e) {
-    writeJSON(res, 200, { has_plan: false, plan_status: 'error', error: e.message, subscriptions: [], logged_in: true });
+    globalThis._lastPlanData = { has_plan: false, plan_status: 'error', error: e.message, subscriptions: [], logged_in: true };
+    writeJSON(res, 200, globalThis._lastPlanData);
   }
 }
 
@@ -1810,15 +1819,192 @@ async function validateApiKey() {
 
 // --- AI Wallpaper Generation ---
 let _genProgress = { kind: null, progress: 0 };
-let _sseClients = [];
-function broadcastProgress() {
-  const data = JSON.stringify(_genProgress);
-  if (_sseClients.length > 0) console.log('[SSE] broadcasting', data, 'to', _sseClients.length, 'clients');
-  _sseClients = _sseClients.filter(c => {
-    try { c.write(`data: ${data}\n\n`); return true; } catch (e) { return false; }
+
+// WebSocket server (ws library, on same HTTP server)
+const WS_PATH = '/ws';
+let _wss = null;
+let _wsClients = new Set();
+
+function initWSServer(server) {
+  if (_wss) return _wss;
+  _wss = new WebSocketServer({ server, path: WS_PATH });
+  _wss.on('connection', (ws) => {
+    _wsClients.add(ws);
+    ws.send(JSON.stringify({ type: 'health', data: getHealthPayload() }));
+    ws.send(JSON.stringify({ type: 'plan', data: currentPlanPayload() }));
+    ws.send(JSON.stringify({ type: 'progress', data: _genProgress }));
+    _startWSTimers();
+    ws.on('message', (raw) => {
+      try { const msg = JSON.parse(raw.toString()); handleWSMessage(ws, msg); } catch {}
+    });
+    ws.on('close', () => { _wsClients.delete(ws); _startWSTimers(); });
+    ws.on('error', () => { _wsClients.delete(ws); _startWSTimers(); });
   });
+  return _wss;
+}
+
+function wsSendAll(msg) {
+  const data = typeof msg === 'string' ? msg : JSON.stringify(msg);
+  for (const ws of _wsClients) {
+    if (ws.readyState === 1) ws.send(data);
+  }
+}
+
+globalThis._lastPlanData = null;
+
+function currentPlanPayload() {
+  if (globalThis._lastPlanData) return globalThis._lastPlanData;
+  return { has_plan: false, plan_status: 'none', subscriptions: [], logged_in: false };
+}
+
+function getHealthPayload() {
+  const tokenState = (config.keys || []).filter(t => t && t.key).map(t => {
+    const maskedToken = t.key ? t.key.substring(0, 10) + '...' + t.key.substring(t.key.length - 4) : '';
+    return { name: t.name || 'Unnamed Key', key: maskedToken, has_key: !!t.key, status: t.key ? 'active' : 'none' };
+  });
+  return {
+    ok: true, test_mode: config.testMode, started_at: startTime.toISOString(),
+    uptime_sec: Math.floor((Date.now() - startTime.getTime()) / 1000),
+    api_key_valid: true, token_state: tokenState,
+    valid_tokens: tokenState.filter(t => t.status !== 'none').length,
+    models_count: AGNES_MODELS.length, runtime: IS_BUN ? 'bun' : 'node',
+    runtime_version: RUNTIME_VERSION,
+    cache: { size: responseCache._map.size, maxSize: responseCache.maxSize, ttlMs: responseCache.ttlMs, hits: responseCache.hits, misses: responseCache.misses, evictions: responseCache.evictions, enabled: config.cacheEnabled },
+    platform: {
+      logged_in: !!platformSession.token,
+      user: platformSession.user ? (platformSession.user.email || null) : null,
+      users: (config.platformUsers || []).map(u => ({ username: u.username, logged_in: !!u.token, email: (u.user && u.user.email) || null }))
+    }
+  };
+}
+
+function broadcastProgress() {
+  wsSendAll({ type: 'progress', data: _genProgress });
 }
 function setGenProgress(kind, progress) { _genProgress = { kind, progress }; broadcastProgress(); }
+
+let _healthTimer = null;
+let _planTimer = null;
+
+function _broadcastHealth() {
+  wsSendAll({ type: 'health', data: getHealthPayload() });
+}
+
+function _broadcastPlan() {
+  if (config.testMode) {
+    const d = {
+      has_plan: true, logged_in: true, plan_status: 'active',
+      subscription: { name: 'Test', billing_cycle: 'monthly', status: 'active', payment_method: 'card', key_preview: 'test-xxxx', key_status: 'active', current_period_start: new Date(Date.now() - 30 * 86400000).toISOString(), current_period_end: new Date(Date.now() + 30 * 86400000).toISOString() },
+      subscription_features: { tps_normal: 60, tps_offpeak: 120, usage_multiplier: 1, claw_agents: true, image_gen: false, video_gen: true, tools: true, mcp: [] },
+      windowed: { used: 50, limit: 1000, usage_pct: 5, reset_at: new Date(Date.now() + 5 * 3600000).toISOString(), reset_in_seconds: 18000 },
+      weekly: { used: 200, limit: 10000, usage_pct: 2, reset_at: new Date(Date.now() + 7 * 86400000).toISOString(), reset_in_seconds: 604800 },
+      image_daily: { used: 10, limit: 100, usage_pct: 10, reset_at: new Date(Date.now() + 24 * 3600000).toISOString(), reset_in_seconds: 86400 },
+    };
+    globalThis._lastPlanData = d;
+    wsSendAll({ type: 'plan', data: d });
+    return;
+  }
+  if (!platformSession.token) {
+    globalThis._lastPlanData = { has_plan: false, plan_status: 'none', subscriptions: [], logged_in: false };
+    wsSendAll({ type: 'plan', data: globalThis._lastPlanData });
+    return;
+  }
+  fetch(`${PLATFORM_BASE_URL}/api/user/subscription`, { headers: getPlatformHeaders(), signal: AbortSignal.timeout(10000) })
+    .then(async (resp) => {
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      const sub = data.data || (Array.isArray(data) ? data[0] : null);
+      if (!sub) {
+        globalThis._lastPlanData = { has_plan: false, plan_status: 'none', subscriptions: [], logged_in: true };
+        wsSendAll({ type: 'plan', data: globalThis._lastPlanData });
+        return;
+      }
+      const statusMap = { active: 'active', pending: 'pending', expired: 'expired', cancelled: 'cancelled' };
+      const textGen = sub.usage?.text_generation;
+      const windowed = textGen?.windowed || {};
+      const weekly = textGen?.weekly || {};
+      const imgGen = sub.usage?.image_generation;
+      const imgDaily = imgGen?.daily || {};
+      const subFeatures = sub.features || {};
+      globalThis._lastPlanData = {
+        has_plan: true, logged_in: true, plan_status: statusMap[sub.status] || 'unknown',
+        username: platformSession.user?.username || platformSession.user?.email || null,
+        subscription: { name: sub.plan_name, billing_cycle: sub.billing_cycle, status: sub.status, payment_method: sub.payment_method, key_preview: sub.key_preview, key_status: sub.key_status, current_period_start: sub.current_period_start, current_period_end: sub.current_period_end },
+        subscription_features: { tps_normal: subFeatures.tps_normal, tps_offpeak: subFeatures.tps_offpeak, usage_multiplier: subFeatures.usage_multiplier, claw_agents: subFeatures.claw_agents, image_gen: subFeatures.image_gen, video_gen: subFeatures.video_gen, tools: subFeatures.tools, mcp: subFeatures.mcp || [] },
+        windowed: { used: windowed.used, limit: windowed.limit, usage_pct: windowed.usage_pct, reset_at: windowed.reset_at, reset_in_seconds: windowed.reset_in_seconds },
+        weekly: { used: weekly.used, limit: weekly.limit, usage_pct: weekly.usage_pct, reset_at: weekly.reset_at, reset_in_seconds: weekly.reset_in_seconds },
+        image_daily: { used: imgDaily.used, limit: imgDaily.limit, usage_pct: imgDaily.usage_pct, reset_at: imgDaily.reset_at, reset_in_seconds: imgDaily.reset_in_seconds },
+      };
+      wsSendAll({ type: 'plan', data: globalThis._lastPlanData });
+    }).catch(() => {
+      wsSendAll({ type: 'plan', data: { has_plan: false, plan_status: 'error', error: 'fetch failed', subscriptions: [], logged_in: true }});
+    });
+}
+
+function _startWSTimers() {
+  if (_healthTimer) clearInterval(_healthTimer);
+  if (_planTimer) clearInterval(_planTimer);
+  _healthTimer = setInterval(() => _broadcastHealth(), 15000);
+  _planTimer = setInterval(() => _broadcastPlan(), 30000);
+}
+
+function notifyConfigChange() {
+  wsSendAll({ type: 'config_change' });
+}
+
+async function handleWSMessage(ws, msg) {
+  if (msg.type === 'rpc') {
+    const fakeRes = new FakeResponse();
+    let resolved = false;
+    fakeRes._onEnd = () => {
+      if (resolved) return;
+      resolved = true;
+      const body = fakeRes._body ? fakeRes._body.toString('utf8') : '';
+      ws.send(JSON.stringify({ type: 'rpc_result', id: msg.id, status: fakeRes.statusCode, body }));
+    };
+    const fakeReq = {
+      method: msg.method || 'GET',
+      url: msg.path,
+      headers: Object.assign({}, msg.headers || {}),
+      _body: msg.body != null ? (typeof msg.body === 'string' ? msg.body : JSON.stringify(msg.body)) : '',
+      on: function() { return fakeReq; },
+    };
+    try {
+      await handleRequest(fakeReq, fakeRes);
+    } catch (e) {
+      if (!resolved) {
+        resolved = true;
+        ws.send(JSON.stringify({ type: 'rpc_error', id: msg.id, error: e.message }));
+      }
+      return;
+    }
+    if (!resolved) {
+      resolved = true;
+      ws.send(JSON.stringify({ type: 'rpc_result', id: msg.id, status: 202, body: '{}' }));
+    }
+  }
+}
+
+class FakeResponse {
+  constructor() {
+    this.statusCode = 200;
+    this._headers = {};
+    this._chunks = [];
+  }
+  writeHead(code, headers) { this.statusCode = code; if (headers) Object.assign(this._headers, headers); return this; }
+  setHeader(key, value) { this._headers[key.toLowerCase()] = value; return this; }
+  getHeader(key) { return this._headers[key.toLowerCase()]; }
+  headersSent = false;
+  write(chunk) { if (chunk != null) this._chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)); return true; }
+  end(chunk) {
+    if (chunk != null) this._chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    this._body = Buffer.concat(this._chunks.length ? this._chunks : [Buffer.alloc(0)]);
+    if (this._onEnd) this._onEnd();
+  }
+  on(evt, fn) { if (evt === 'close') this._onClose = fn; return this; }
+  once(evt, fn) { if (evt === 'close') this._onClose = fn; return this; }
+  removeListener() { return this; }
+}
 let _aiWallpaperGen = false;
 let _aiWallpaperGenPromise = null;
 async function generateAiWallpaperToDisk() {
@@ -1967,26 +2153,40 @@ async function generateAiVideoToDisk() {
       const frameRate = 24;
       const numFrames = calcNumFrames(videoDuration, frameRate);
 
-      const taskResp = await fetch(`${config.upstreamBaseURL}/v1/videos`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'User-Agent': AGNES_USER_AGENT,
-        },
-        body: JSON.stringify({
-          model: 'agnes-video-v2.0',
-          prompt,
-          width: 1280,
-          height: 768,
-          num_frames: numFrames,
-          frame_rate: frameRate,
-        }),
-        signal: AbortSignal.timeout(30000),
+      const taskBody = JSON.stringify({
+        model: 'agnes-video-v2.0',
+        prompt,
+        width: 1280,
+        height: 768,
+        num_frames: numFrames,
+        frame_rate: frameRate,
       });
-      if (!taskResp.ok) throw new Error(`upstream ${taskResp.status}`);
-      const taskData = await taskResp.json();
+      const taskResp = await retryLoop(async ({ isLast }) => {
+        try {
+          const r = await fetch(`${config.upstreamBaseURL}/v1/videos`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'User-Agent': AGNES_USER_AGENT,
+            },
+            body: taskBody,
+            signal: AbortSignal.timeout(120000),
+          });
+          if (!r.ok) {
+            if (isLast) throw new Error(`upstream ${r.status}`);
+            return { retry: true };
+          }
+          return { retry: false, response: r };
+        } catch (e) {
+          if (isLast) throw e;
+          return { retry: true };
+        }
+      });
+      if (!taskResp.response) throw new Error('video task creation failed after retries');
+      const taskRespObj = taskResp.response;
+      const taskData = await taskRespObj.json();
       const taskId = taskData.task_id || taskData.id;
       if (!taskId) throw new Error('no task id');
 
@@ -2072,7 +2272,6 @@ async function handleRequest(req, res) {
         try {
           const imgBuf = fs.readFileSync(aiFile);
           wpStyle = '<style>body{background:url(data:image/jpeg;base64,' + imgBuf.toString('base64') + ') center/cover no-repeat fixed}</style>';
-          generateAiWallpaperToDisk().catch(() => {});
         } catch (e) { console.error('[AI] Failed to embed ai-paper:', e.message); }
       } else {
         try {
@@ -2086,7 +2285,6 @@ async function handleRequest(req, res) {
       if (fs.existsSync(vidFile)) {
         wpStyle = '<style>#wp-video-bg{position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;z-index:-2;pointer-events:none;background:#0d1117}#wp-video-fallback{position:fixed;inset:0;background:#0d1117;z-index:-3}</style>'
                 + '<video id="wp-video-bg" autoplay loop muted playsinline preload="auto" src="/api/bg?t=' + Date.now() + '"></video><div id="wp-video-fallback"></div>';
-        generateAiVideoToDisk().catch(() => {});
       } else {
         wpStyle = '<style>#wp-video-fallback{position:fixed;inset:0;background:#0d1117;z-index:-2}</style><div id="wp-video-fallback"></div>';
         try {
@@ -2202,6 +2400,7 @@ async function handleRequest(req, res) {
         }
         saveConfig(config);
         setupOpencodeConfig();
+        notifyConfigChange();
         writeJSON(res, 200, { success: true });
       }
       catch (e) { writeJSON(res, 400, { error: e.message }); }
@@ -2272,6 +2471,7 @@ async function handleRequest(req, res) {
     config.apiKey = config.keys[0]?.key || '';
     saveConfig(config);
     setupOpencodeConfig();
+    notifyConfigChange();
     writeJSON(res, 200, { success: true });
     return;
   }
@@ -2299,6 +2499,8 @@ async function handleRequest(req, res) {
       config.keys = config.keys.filter(t => t.platformUser && t.platformUser.toLowerCase() !== username.toLowerCase());
       if (config.keys.length === 0) config.keys.push({ name: 'Key 1', key: '' });
       saveConfig(config);
+      setupOpencodeConfig();
+      notifyConfigChange();
       writeJSON(res, 200, { success: true });
     } catch (e) { writeJSON(res, 400, { error: e.message }); }
     return;
@@ -2412,7 +2614,6 @@ async function handleRequest(req, res) {
           const imgData = fs.readFileSync(aiFile);
           res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': imgData.length, 'Cache-Control': 'no-cache' });
           res.end(imgData);
-          generateAiWallpaperToDisk().catch(() => {});
         } else {
           try {
             await generateAiWallpaperToDisk();
@@ -2437,7 +2638,6 @@ async function handleRequest(req, res) {
           const vidData = fs.readFileSync(vidFile);
           res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': vidData.length, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' });
           res.end(vidData);
-          generateAiVideoToDisk().catch(() => {});
           return;
         }
         try {
@@ -2522,8 +2722,7 @@ async function handleRequest(req, res) {
     if (accept.includes('text/event-stream')) {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'Access-Control-Allow-Origin': '*' });
       res.write(`data: ${JSON.stringify(_genProgress)}\n\n`);
-      _sseClients.push(res);
-      req.on('close', () => { _sseClients = _sseClients.filter(c => c !== res); });
+      res.end();
       return;
     }
     writeJSON(res, 200, _genProgress);
@@ -2567,6 +2766,7 @@ async function handleRequest(req, res) {
           if (!config.apiKey && data.key) config.apiKey = data.key;
           saveConfig(config);
           setupOpencodeConfig();
+          notifyConfigChange();
           writeJSON(res, 200, { success: true, keys: config.keys });
         } else if (data.action === 'update') {
           if (typeof data.index !== 'number' || !config.keys || !config.keys[data.index]) { writeJSON(res, 404, { error: 'Key not found' }); return; }
@@ -2576,6 +2776,7 @@ async function handleRequest(req, res) {
           if (data.index === 0 && config.keys[0].key) config.apiKey = config.keys[0].key;
           saveConfig(config);
           setupOpencodeConfig();
+          notifyConfigChange();
           writeJSON(res, 200, { success: true, keys: config.keys });
         } else if (data.action === 'delete') {
           if (typeof data.index !== 'number' || !config.keys || !config.keys[data.index]) { writeJSON(res, 404, { error: 'Key not found' }); return; }
@@ -2583,6 +2784,7 @@ async function handleRequest(req, res) {
           if (data.index === 0) config.apiKey = config.keys[0]?.key || '';
           saveConfig(config);
           setupOpencodeConfig();
+          notifyConfigChange();
           writeJSON(res, 200, { success: true, keys: config.keys });
         } else {
           writeJSON(res, 400, { error: 'Unknown action' });
@@ -2819,6 +3021,7 @@ async function startServer() {
 
   function tryListen() {
     const server = http.createServer(handleRequest);
+    initWSServer(server);
     server.on('error', (e) => {
       if (e.code === 'EADDRINUSE' && listenRetries < MAX_LISTEN_RETRIES) {
         listenRetries++;
