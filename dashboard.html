@@ -3433,7 +3433,7 @@
       try {
         const resp = await wsFetch('/v1/chat/completions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-test-source': 'dashboard' },
           body: JSON.stringify({
             model: testChatModel,
             stream: false,

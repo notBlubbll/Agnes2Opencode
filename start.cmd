@@ -23,13 +23,19 @@ echo.
 set "BUN_PATH=C:\WINDOWS\system32\config\systemprofile\.bun\bin"
 set "PATH=%BUN_PATH%;%PATH%"
 
-echo [1/3] Cleaning up...
+echo [1/4] Cleaning up...
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%PORT% " ^| findstr "LISTENING"') do (
     taskkill /PID %%a /F >nul 2>&1
 )
 timeout /t 1 /nobreak >nul
 
-echo [2/3] Detecting runtime...
+echo [2/4] Installing dependencies...
+call npm i
+if exist "%~dp0package-lock.json" del /q "%~dp0package-lock.json"
+title Agnes2Opencode
+echo.
+
+echo [3/4] Detecting runtime...
 where bun >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     echo [INFO] Runtime: Bun
@@ -49,7 +55,7 @@ pause
 exit
 
 :start
-echo [3/3] Starting proxy...
+echo [4/4] Starting proxy...
 echo.
 echo ==================================================
 echo  Proxy: http://localhost:%PORT%

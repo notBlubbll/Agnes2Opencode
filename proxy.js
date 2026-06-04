@@ -707,7 +707,7 @@ function fingerprintPayload(payload) {
   return crypto.createHash('md5').update(stripped).digest('hex').slice(0, 12);
 }
 
-function detectSessionSignal(payload) {
+function detectSessionSignal(payload, skipLabel) {
   const keys = config.keys || [];
   if (keys.length < 1) return null;
 
@@ -733,15 +733,17 @@ function detectSessionSignal(payload) {
   const newEntry = { tokenIndex: currentTokenIndex, requestCount: 1, sessNum: ++globalSessionCounter };
   conversationMap.set(fingerprint, newEntry);
 
-  const msgs = payload.messages;
-  const text = (m) => typeof m.content === 'string' ? m.content : (Array.isArray(m.content) ? m.content.find(p => p?.type === 'text')?.text || '' : '');
-  let stampIdx = msgs.findIndex(m => m.role === 'user' && !TITLE_PROMPT_RE.test(text(m)));
-  if (stampIdx < 0) stampIdx = msgs.findIndex(m => m.role === 'user');
-  const m = msgs[stampIdx];
-  const curIdx = currentTokenIndex;
-  const label = `${keys[curIdx].name}|sess${newEntry.sessNum}`;
-  const setter = (c) => { if (typeof c === 'string') return `[${label}] ${c}`; if (Array.isArray(c)) { const b = c.find(p => p?.type === 'text'); if (b) b.text = `[${label}] ${b.text}`; } return c; };
-  m.content = setter(m.content);
+  if (!skipLabel) {
+    const msgs = payload.messages;
+    const text = (m) => typeof m.content === 'string' ? m.content : (Array.isArray(m.content) ? m.content.find(p => p?.type === 'text')?.text || '' : '');
+    let stampIdx = msgs.findIndex(m => m.role === 'user' && !TITLE_PROMPT_RE.test(text(m)));
+    if (stampIdx < 0) stampIdx = msgs.findIndex(m => m.role === 'user');
+    const m = msgs[stampIdx];
+    const curIdx = currentTokenIndex;
+    const label = `${keys[curIdx].name}|sess${newEntry.sessNum}`;
+    const setter = (c) => { if (typeof c === 'string') return `[${label}] ${c}`; if (Array.isArray(c)) { const b = c.find(p => p?.type === 'text'); if (b) b.text = `[${label}] ${b.text}`; } return c; };
+    m.content = setter(m.content);
+  }
   return newEntry;
 }
 
@@ -1492,7 +1494,8 @@ async function handleChatCompletions(req, res) {
   const requestedModel = remapModel((payload.model || '').trim());
   if (!requestedModel) { writeOpenAIError(res, 400, 'model is required', 'invalid_request_error', ''); return; }
   payload.model = requestedModel;
-  await proxyChatRequest(res, payload, requestedModel);
+  const skipLabel = req.headers['x-test-source'] === 'dashboard';
+  await proxyChatRequest(res, payload, requestedModel, skipLabel);
 }
 
 function isImageOrVideoModel(modelId) {
@@ -1640,16 +1643,16 @@ async function proxyImageRequest(res, payload, requestedModel) {
   }
 }
 
-async function proxyChatRequest(res, payload, requestedModel) {
+async function proxyChatRequest(res, payload, requestedModel, skipLabel) {
   const reqStart = Date.now();
 
   if (isImageOrVideoModel(requestedModel)) {
-    detectSessionSignal(payload);
+    detectSessionSignal(payload, skipLabel);
     await proxyImageRequest(res, payload, requestedModel);
     return;
   }
 
-  const session = detectSessionSignal(payload);
+  const session = detectSessionSignal(payload, skipLabel);
 
   if (!config.apiKey) { writeOpenAIError(res, 503, 'no Agnes AI API key configured', 'server_error', 'no_api_key'); return; }
 
@@ -2219,7 +2222,7 @@ async function generateAiVideoToDisk() {
           }
           if (s === 'queued') {
             if (queuedSince === 0) queuedSince = Date.now();
-            else if (Date.now() - queuedSince > 30000) {
+            else if (Date.now() - queuedSince > 300000) {
               throw new Error('video stuck in queue — likely requires a paid plan (video_gen feature)');
             }
           } else {

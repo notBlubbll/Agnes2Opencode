@@ -21,19 +21,25 @@ echo  Enforces Node.js (ignores Bun)
 echo ==================================================
 echo.
 
-echo [1/3] Cleaning up...
+echo [1/4] Cleaning up...
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%PORT% " ^| findstr "LISTENING"') do (
     taskkill /PID %%a /F >nul 2>&1
 )
 timeout /t 1 /nobreak >nul
 
-echo [2/3] Detecting Node.js...
+echo [2/4] Installing dependencies...
+call npm i
+if exist "%~dp0package-lock.json" del /q "%~dp0package-lock.json"
+title Agnes2Opencode - Node.js Mode
+echo.
+
+echo [3/4] Detecting Node.js...
 where node >nul 2>&1
 if %ERRORLEVEL% neq 0 goto :no_runtime
 
 echo [INFO] Runtime: Node.js
 
-echo [3/3] Starting proxy...
+echo [4/4] Starting proxy...
 echo.
 echo ==================================================
 echo  Proxy: http://localhost:%PORT%
